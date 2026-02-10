@@ -130,6 +130,8 @@ void DSPcode(void * pvParameters)
       }
     }
 
+//These output still need to be normalized
+
     outBands.band1 = bandValues[0];
     outBands.band2 = bandValues[1];
     outBands.band3 = bandValues[2];
