@@ -1,0 +1,80 @@
+#include <WiFi.h>
+#include <esp_now.h>
+#include <FastLED.h>
+
+//Pins
+#define LED_PIN 22
+#define BUTTON_PIN 3
+
+//Constants
+#define LED_COUNT 4
+
+//LED array
+CRGB leds[LED_COUNT];
+
+//Reciever mac adress
+uint8_t pedalAddress[] = {0xb8, 0xf8, 0x62, 0xd5, 0xcd, 0x24}; 
+
+//FFT analysis input
+typedef struct struct_message_in {
+  float band1, band2, band3, band4, band5, band6;
+} struct_message_in;
+
+//MIDI controll output
+typedef struct struct_message_out {
+  float channel1;
+} struct_message_out;
+
+struct_message_in inBands;
+struct_message_out outMidi;
+
+//Esp32 WiFi
+esp_now_peer_info_t peerInfo;
+
+// Callback when data is sent
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  Serial.print("\r\nLast Packet Send Status:\t");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+}
+
+void setup() 
+{
+  Serial.begin(115200);
+
+  FastLED.addLeds<WS2812B, LED_PIN, GRB>(leds, LED_COUNT);
+  FastLED.setBrightness(128);
+
+  //Turn off LEDs
+  fill_solid(leds, LED_COUNT, CRGB::Black);
+  FastLED.show();
+
+  //Set device as a WiFi station
+  WiFi.mode(WIFI_STA);
+
+  // Init ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error initializing ESP-NOW");
+    return;
+  }
+
+  // Once ESPNow is successfully Init, we will register for Send CB to
+  // get the status of Transmitted packet
+  esp_now_register_send_cb(esp_now_send_cb_t(OnDataSent));
+
+  // Register peer
+  memcpy(peerInfo.peer_addr, pedalAddress, 6);
+  peerInfo.channel = 0;  
+  peerInfo.encrypt = false;
+  
+  // Add peer        
+  if (esp_now_add_peer(&peerInfo) == ESP_OK)
+  {
+    Serial.println("Failed to add peer");
+    return;
+  }
+}
+
+void loop() 
+{
+  
+}
