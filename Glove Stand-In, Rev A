@@ -1,6 +1,9 @@
 #include <WiFi.h>
 #include <esp_now.h>
-#include <FastLED.h>
+#include <Adafruit_NeoPixel.h>
+#ifdef __AVR__
+#include <avr/power.h> // Required for 16 MHz Adafruit Trinket
+#endif
 
 //Pins
 #define LED_PIN 22
@@ -10,7 +13,11 @@
 #define LED_COUNT 4
 
 //LED array
-CRGB leds[LED_COUNT];
+//CRGB leds[LED_COUNT];
+
+Adafruit_NeoPixel pixels(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+#define DELAYVAL 10
 
 //Reciever mac adress
 uint8_t pedalAddress[] = {0xb8, 0xf8, 0x62, 0xd5, 0xcd, 0x24}; 
@@ -32,21 +39,41 @@ struct_message_out outMidi;
 esp_now_peer_info_t peerInfo;
 
 // Callback when data is sent
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) 
+{
   Serial.print("\r\nLast Packet Send Status:\t");
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
 }
 
+//When data is had
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) 
+{
+  memcpy(&inBands, incomingData, sizeof(inBands));
+  
+  Serial.print(inBands.band1); Serial.print(", "); 
+  Serial.print(inBands.band2); Serial.print(", ");
+  Serial.print(inBands.band3); Serial.print(", ");
+  Serial.print(inBands.band4); Serial.print(", ");
+  Serial.print(inBands.band5); Serial.print(", "); 
+  Serial.print(inBands.band6); Serial.println("; ");
+}
+
 void setup() 
 {
+  #if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
+  clock_prescale_set(clock_div_1);
+  #endif
+
   Serial.begin(115200);
 
-  FastLED.addLeds<WS2812B, LED_PIN, GRB>(leds, LED_COUNT);
-  FastLED.setBrightness(128);
+  pixels.begin(); // INITIALIZE NeoPixel strip object (REQUIRED)
+
+  // FastLED.addLeds<WS2812B, LED_PIN, GRB>(leds, LED_COUNT);
+  // FastLED.setBrightness(128);
 
   //Turn off LEDs
-  fill_solid(leds, LED_COUNT, CRGB::Black);
-  FastLED.show();
+  // fill_solid(leds, LED_COUNT, CRGB::Black);
+  // FastLED.show();
 
   //Set device as a WiFi station
   WiFi.mode(WIFI_STA);
@@ -54,27 +81,70 @@ void setup()
   // Init ESP-NOW
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error initializing ESP-NOW");
-    return;
   }
 
   // Once ESPNow is successfully Init, we will register for Send CB to
   // get the status of Transmitted packet
   esp_now_register_send_cb(esp_now_send_cb_t(OnDataSent));
 
+  // Once ESPNow is successfully Init, we will register for recv CB to
+  // get recv packer info
+  esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecv));
+
   // Register peer
   memcpy(peerInfo.peer_addr, pedalAddress, 6);
-  peerInfo.channel = 0;  
+  peerInfo.channel = 1;  
   peerInfo.encrypt = false;
   
-  // Add peer        
-  if (esp_now_add_peer(&peerInfo) == ESP_OK)
+  // Add peer    
+  while(esp_now_add_peer(&peerInfo) != ESP_OK)
   {
     Serial.println("Failed to add peer");
-    return;
-  }
+  }    
 }
 
 void loop() 
 {
+  //band1 is the greatest: make it red
+  if((inBands.band1 > inBands.band2) && (inBands.band1 > inBands.band3)
+     && (inBands.band1 > inBands.band4) && (inBands.band1 > inBands.band5)
+     && (inBands.band1 > inBands.band6)) {
+      pixels.fill(pixels.ColorHSV(0xf800, 128, 128), 0, 4);
+    }
+  //band2 is the greatest: make it arenge
+  else if((inBands.band2 > inBands.band1) && (inBands.band2 > inBands.band3)
+     && (inBands.band2 > inBands.band4) && (inBands.band2 > inBands.band5)
+     && (inBands.band2 > inBands.band6)) {
+      pixels.fill(pixels.ColorHSV(0xfD20, 128, 128), 0, 4);
+    }
+  //band 3 is the greatest: make it yellow
+  else if((inBands.band3 > inBands.band1) && (inBands.band3 > inBands.band2)
+     && (inBands.band3 > inBands.band4) && (inBands.band3 > inBands.band5)
+     && (inBands.band3 > inBands.band6)) {
+      pixels.fill(pixels.ColorHSV(0xffe0, 128, 128), 0, 4);
+    }
+  //band 4 is the greatest: make it green
+  else if((inBands.band4 > inBands.band1) && (inBands.band4 > inBands.band2)
+     && (inBands.band4 > inBands.band3) && (inBands.band4 > inBands.band5)
+     && (inBands.band4 > inBands.band6)) {
+      pixels.fill(pixels.ColorHSV(0x07e0, 128, 128), 0, 4);
+    }
   
+  //band 5 is the greatest: make it blue
+  else if((inBands.band5 > inBands.band1) && (inBands.band5 > inBands.band2)
+     && (inBands.band5 > inBands.band3) && (inBands.band5 > inBands.band4)
+     && (inBands.band5 > inBands.band6)) {
+      pixels.fill(pixels.ColorHSV(0x001f, 128, 128), 0, 4);
+    }
+
+  //band 6 is the greatest: make it violet 
+  else if((inBands.band6 > inBands.band1) && (inBands.band6 > inBands.band2)
+     && (inBands.band6 > inBands.band3) && (inBands.band6 > inBands.band4)
+     && (inBands.band6 > inBands.band5)) {
+      pixels.fill(pixels.ColorHSV(0x897b, 128, 128), 0, 4);
+    }
+  pixels.setBrightness(64);
+  pixels.show();
+
+  delay(DELAYVAL);
 }
