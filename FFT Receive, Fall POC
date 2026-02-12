@@ -1,98 +1,67 @@
+
 #include <arduinoFFT.h>
-#include <queue.h>
 #include <WiFi.h>
 #include <esp_now.h>
 
-//Core differentiaiton
-TaskHandle_t Task1;
-TaskHandle_t Task2;
+#define SAMPLES         512          // Must be a power of 2
+#define SAMPLING_FREQ   30000         // Hz, must be 40000 or less due to ADC conversion time. Determines maximum frequency that can be analysed by the FFT Fmax=sampleF/2.
+#define AMPLITUDE       1            // Depending on your audio source level, you may need to alter this value. Can be used as a 'sensitivity' control.
+#define AUDIO_IN_PIN    0            // Signal in on this pin
+#define NUM_BANDS       6            // To change this, you will need to change the bunch of if statements describing the mapping from bins to bands
+#define NOISE           1000           // Used as a crude noise filter, values below this are ignored
 
-//Pins
-#define AUDIO_PIN 13
-#define WIFI_LED 12
-#define PEAK_LED 10
+#define BAND1_PIN       1
+#define BAND2_PIN       2
+#define BAND3_PIN       21
+#define BAND4_PIN       22
+#define BAND5_PIN       23
+#define BAND6_PIN       16
 
-//Thresholds
-#define PEAK 4040
+#define RUN_AVG_N       4
 
-//FFT parameters
-#define SAMPLES         1024
-#define SAMPLING_FREQ   40000  
-#define NOISE           1000 
-#define BAND_COUNT       6
-
-//Peak deteciton variables
-int peakBrightness;
-
-//FFT variables
-int16_t adcBuffer[SAMPLES];
-size_t byteCount;
-
+// Sampling and FFT stuff
 unsigned int sampling_period_us;
+int peak[] = {1,1,1,1,1,1};              // The length of these arrays must be >= NUM_BANDS
+int bandValues[] = {0,0,0,0,0,0};
+double vReal[SAMPLES];
+double vImag[SAMPLES];
 unsigned long newTime;
-float vReal[SAMPLES];
-float vImag[SAMPLES];
-float peakValues[] = {1,1,1,1,1,1};
-float bandValues[] = {0,0,0,0,0,0};
+ArduinoFFT<double> FFT(vReal, vImag, SAMPLES, SAMPLING_FREQ);
 
-ArduinoFFT<float> FFT(vReal, vImag, SAMPLES, SAMPLING_FREQ);
+/*
+//Wifi stuff
+uint8_t broadcastAddress[] = {0xb8, 0xf8, 0x62, 0xd5, 0xcd, 0x24};
 
-//FFT ouput cue for wifi
-QueueHandle_t fftQueue;
-
-//Reciever mac adress
-uint8_t gloveAddress[] = {0x98, 0xa3, 0x16, 0x85, 0x18, 0xb0}; //XIAO glove standin
-
-//FFT analysis output 
-typedef struct struct_message_out {
+//Struct for WiFi communication
+typedef struct struct_message {
   float band1, band2, band3, band4, band5, band6;
-} struct_message_out;
+} struct_message;
 
-//MIDI controll input
-typedef struct struct_message_in {
-  float channel1;
-} struct_message_in;
+//Message to hold band data to transmit
+struct_message outBands;
 
-struct_message_out outBands;
-struct_message_in inMidi;
+esp_now_peer_info_t peerInfo;
 
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) 
-{
-  if(status == ESP_NOW_SEND_SUCCESS)
-  {
-    Serial.println("Delivery Success");
-    analogWrite(WIFI_LED, 255);
-  }
-  else
-  {
-    Serial.println("Delivery Fail");
-    analogWrite(WIFI_LED, 0); 
-  }
+// Callback when data is sent
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  Serial.print("\r\nLast Packet Send Status:\t");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
 }
-
-//When data is had
-void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) 
-{
-
-}
-
-/*-------------------------------------------------*/
+*/
 
 void setup() {
   Serial.begin(115200);
-
-  //Pins
-  pinMode(AUDIO_PIN, INPUT);
-  pinMode(PEAK_LED, OUTPUT);
-
-  //ADC Setup
-  analogReadResolution(12);
-  analogSetAttenuation(ADC_11db);
-
-  //Sample period initialization
   sampling_period_us = round(1000000 * (1.0 / SAMPLING_FREQ));
 
-  //Set device as a WiFi station
+  pinMode(BAND1_PIN, OUTPUT);
+  pinMode(BAND2_PIN, OUTPUT);
+  pinMode(BAND3_PIN, OUTPUT);
+  pinMode(BAND4_PIN, OUTPUT);
+  pinMode(BAND5_PIN, OUTPUT);
+  pinMode(BAND6_PIN, OUTPUT);
+
+/*
+  // Set device as a Wi-Fi Station
   WiFi.mode(WIFI_STA);
 
   // Init ESP-NOW
@@ -101,118 +70,86 @@ void setup() {
     return;
   }
 
-  //FreeRTOS queue with 10 spots
-  fftQueue = xQueueCreate(10, sizeof(struct_message_out));
-
-  //Core designation
-  xTaskCreatePinnedToCore(MIDIcode, "Task2", 20000, NULL, 1, &Task2, 0); //Pin task to core 0
-  delay(500); 
-
-  xTaskCreatePinnedToCore(DSPcode, "Task1", 20000, NULL, 1, &Task1, 1); //pin task to core 1                  
-  delay(500); 
-}
-
-void DSPcode(void * pvParameters)
-{
-  while(true)
-  {
-    for (int i = 0; i < BAND_COUNT; i++){
-      bandValues[i] = 0;
-    }
-
-    //Read adc and put into buffer
-    for (int i = 0; i < SAMPLES; i++) 
-    {
-      newTime = micros();
-      vReal[i] = analogRead(AUDIO_PIN); // A conversion takes about 9.7uS on an ESP32
-      vImag[i] = 0;
-
-      if(vReal[i] > PEAK) peakBrightness = 255.0;
-      else if(peakBrightness > 0) peakBrightness -=0.1;
-      analogWrite(PEAK_LED, peakBrightness);
-
-      while ((micros() - newTime) < sampling_period_us) { /* chill */ }
-    }
-
-    FFT.dcRemoval();
-    FFT.windowing(FFT_WIN_TYP_HAMMING, FFT_FORWARD);
-    FFT.compute(FFT_FORWARD);
-    FFT.complexToMagnitude();
-
-    for (int i = 2; i < (SAMPLES/2); i++)
-    {
-      if (vReal[i] > NOISE)
-      {                   
-        if (i <= 2)             bandValues[0] += (int)vReal[i];
-        else if (i <= 6)        bandValues[1] += (int)vReal[i];
-        else if (i <= 12)       bandValues[2] += (int)vReal[i];
-        else if (i <= 40)       bandValues[3] += (int)vReal[i];
-        else if (i <= 100)      bandValues[4] += (int)vReal[i];
-        else                    bandValues[5] += (int)vReal[i];
-      }
-    }
-
-    for(int i = 0; i < BAND_COUNT; i++)
-    {
-      if(bandValues[i] > 0.9 * peakValues[i])
-      {
-        peakValues[i] = bandValues[i];
-      }
-      bandValues[i] = bandValues[i]/peakValues[i];
-    }
-
-    outBands.band1 = bandValues[0];
-    outBands.band2 = bandValues[1];
-    outBands.band3 = bandValues[2];
-    outBands.band4 = bandValues[3];
-    outBands.band5 = bandValues[4];
-    outBands.band6 = bandValues[5];
-
-    vTaskDelay(pdMS_TO_TICKS(1)); //Yeild CPU
-  }
-}
-
-void MIDIcode(void* pvParameters)
-{
-  //Esp32 WiFi
-  esp_now_peer_info_t peerInfo;
-
   // Once ESPNow is successfully Init, we will register for Send CB to
   // get the status of Transmitted packet
   esp_now_register_send_cb(esp_now_send_cb_t(OnDataSent));
-
-  // Once ESPNow is successfully Init, we will register for recv CB to
-  // get recv packer info
-  esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecv));
-
+  
   // Register peer
-  memcpy(peerInfo.peer_addr, gloveAddress, 6);
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
   peerInfo.channel = 0;  
   peerInfo.encrypt = false;
   
-  // Add peer  
-  if (esp_now_add_peer(&peerInfo) != ESP_OK)
-  {
+  // Add peer        
+  if (esp_now_add_peer(&peerInfo) != ESP_OK){
     Serial.println("Failed to add peer");
     return;
-  }     
-  else
-  {
-    analogWrite(WIFI_LED, 255);
   }
-  
-  while(true)
-  {
-    esp_err_t result = esp_now_send(gloveAddress, (uint8_t *) &outBands, sizeof(outBands));
-
-    if (result != ESP_OK) 
-    {
-      Serial.println("Error sending the data");
-    }
-
-  vTaskDelay(pdMS_TO_TICKS(1)); //Yeild CPU
-  }
+*/
 }
 
 void loop() {
+
+  // Reset bandValues[]
+  for (int i = 0; i<NUM_BANDS; i++){
+    bandValues[i] = 0;
+  }
+
+  // Sample the audio pin
+  for (int i = 0; i < SAMPLES; i++) {
+    newTime = micros();
+    vReal[i] = analogRead(AUDIO_IN_PIN); // A conversion takes about 9.7uS on an ESP32
+    vImag[i] = 0;
+    while ((micros() - newTime) < sampling_period_us) { /* chill */ }
+  }
+
+  // Compute FFT
+  FFT.dcRemoval();
+  FFT.windowing(FFT_WIN_TYP_HAMMING, FFT_FORWARD);
+  FFT.compute(FFT_FORWARD);
+  FFT.complexToMagnitude();
+
+  // Analyse FFT results
+  for (int i = 2; i < (SAMPLES/2); i++){       // Don't use sample 0 and only first SAMPLES/2 are usable. Each array element represents a frequency bin and its value the amplitude.
+    if (vReal[i] > NOISE) {                    // Add a crude noise filter
+      if (i <= 2)             bandValues[0] += (int)vReal[i];
+      else if (i <= 6)        bandValues[1] += (int)vReal[i];
+      else if (i <= 12)       bandValues[2] += (int)vReal[i];
+      else if (i <= 40)       bandValues[3] += (int)vReal[i];
+      else if (i <= 100)      bandValues[4] += (int)vReal[i];
+      else                    bandValues[5] += (int)vReal[i];
+    } 
+  }
+
+/*
+  outBands.band1 = bandValues[0];
+  outBands.band2 = bandValues[1];
+  outBands.band3 = bandValues[2];
+  outBands.band4 = bandValues[3];
+  outBands.band5 = bandValues[4];
+  outBands.band6 = bandValues[5];
+*/
+
+  for (int i = 0; i < NUM_BANDS; i++){
+    if(bandValues[i] > peak[i])
+    {
+      peak[i] = bandValues[i];
+    }
+    bandValues[i] / peak[i];
+  }
+
+  analogWrite(BAND1_PIN, 255 * bandValues[0] / peak[0]);
+  analogWrite(BAND2_PIN, 255 * bandValues[1] / peak[1]);
+  analogWrite(BAND3_PIN, 255 * bandValues[2] / peak[2]);
+  analogWrite(BAND4_PIN, 255 * bandValues[3] / peak[3]);
+  analogWrite(BAND5_PIN, 255 * bandValues[4] / peak[4]);
+  analogWrite(BAND6_PIN, 255 * bandValues[5] / peak[5]);
+
+  Serial.print(bandValues[0]); Serial.print(", "); 
+  Serial.print(bandValues[1]); Serial.print(", ");
+  Serial.print(bandValues[2]); Serial.print(", ");
+  Serial.print(bandValues[3]); Serial.print(", ");
+  Serial.print(bandValues[4]); Serial.print(", "); 
+  Serial.print(bandValues[5]); Serial.println("; ");
+
+  //esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outBands, sizeof(outBands));
 }
