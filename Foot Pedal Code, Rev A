@@ -16,10 +16,10 @@ TaskHandle_t Task2;
 #define PEAK 4040
 
 //FFT parameters
-#define SAMPLES         1024
+#define SAMPLES         512
 #define SAMPLING_FREQ   40000  
 #define NOISE           1000 
-#define NUM_BANDS       6
+#define BAND_COUNT       6
 
 //Peak deteciton variables
 int peakBrightness;
@@ -32,14 +32,16 @@ unsigned int sampling_period_us;
 unsigned long newTime;
 float vReal[SAMPLES];
 float vImag[SAMPLES];
-int bandValues[] = {0,0,0,0,0,0};
+float peakValues[] = {1,1,1,1,1,1};
+float bandValues[] = {0,0,0,0,0,0};
+
 ArduinoFFT<float> FFT(vReal, vImag, SAMPLES, SAMPLING_FREQ);
 
 //FFT ouput cue for wifi
 QueueHandle_t fftQueue;
 
 //Reciever mac adress
-uint8_t gloveAddress[] = {0x93, 0xa3, 0x15, 0x85, 0x18, 0xb0}; //XIAO glove standin
+uint8_t gloveAddress[] = {0x98, 0xa3, 0x16, 0x85, 0x18, 0xb0}; //XIAO glove standin
 
 //FFT analysis output 
 typedef struct struct_message_out {
@@ -54,18 +56,24 @@ typedef struct struct_message_in {
 struct_message_out outBands;
 struct_message_in inMidi;
 
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  Serial.print("\r\nLast Packet Send Status:\t");
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) 
+{
   if(status == ESP_NOW_SEND_SUCCESS)
   {
-    Serial.println("Delivery Success");
+    //Serial.println("Delivery Success");
     analogWrite(WIFI_LED, 255);
   }
   else
   {
-    Serial.println("Delivery Fail");
+    //Serial.println("Delivery Fail");
     analogWrite(WIFI_LED, 0); 
   }
+}
+
+//When data is had
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) 
+{
+
 }
 
 /*-------------------------------------------------*/
@@ -81,12 +89,22 @@ void setup() {
   analogReadResolution(12);
   analogSetAttenuation(ADC_11db);
 
-  //FreeRTOS queue with 10 spots
-  fftQueue = xQueueCreate(10, sizeof(struct_message_out));
+  //Sample period initialization
+  sampling_period_us = round(1000000 * (1.0 / SAMPLING_FREQ));
+
+  //Set device as a WiFi station
+  WiFi.mode(WIFI_STA);
+  //esp_wifi_set_ps(WIFI_PS_NONE); 
+
+  // Init ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error initializing ESP-NOW");
+    return;
+  }
 
   //Core designation
   xTaskCreatePinnedToCore(MIDIcode, "Task2", 20000, NULL, 1, &Task2, 0); //Pin task to core 0
-  delay(500); 
+  delay(100); 
 
   xTaskCreatePinnedToCore(DSPcode, "Task1", 20000, NULL, 1, &Task1, 1); //pin task to core 1                  
   delay(500); 
@@ -96,14 +114,16 @@ void DSPcode(void * pvParameters)
 {
   while(true)
   {
+    for (int i = 0; i < BAND_COUNT; i++){
+      bandValues[i] = 0;
+    }
+
     //Read adc and put into buffer
     for (int i = 0; i < SAMPLES; i++) 
     {
       newTime = micros();
       vReal[i] = analogRead(AUDIO_PIN); // A conversion takes about 9.7uS on an ESP32
       vImag[i] = 0;
-
-      Serial.println(vReal[i]);
 
       if(vReal[i] > PEAK) peakBrightness = 255.0;
       else if(peakBrightness > 0) peakBrightness -=0.1;
@@ -130,7 +150,14 @@ void DSPcode(void * pvParameters)
       }
     }
 
-//These output still need to be normalized
+    for(int i = 0; i < BAND_COUNT; i++)
+    {
+      if(bandValues[i] > 0.9 * peakValues[i])
+      {
+        peakValues[i] = bandValues[i];
+      }
+      bandValues[i] = bandValues[i]/peakValues[i];
+    }
 
     outBands.band1 = bandValues[0];
     outBands.band2 = bandValues[1];
@@ -139,51 +166,48 @@ void DSPcode(void * pvParameters)
     outBands.band5 = bandValues[4];
     outBands.band6 = bandValues[5];
 
-    xQueueSendToBack(fftQueue, &outBands, 0);
-
     vTaskDelay(pdMS_TO_TICKS(1)); //Yeild CPU
   }
 }
 
 void MIDIcode(void* pvParameters)
 {
+  vTaskDelay(pdMS_TO_TICKS(500));
   //Esp32 WiFi
-  esp_now_peer_info_t peerInfo;
-
-  //Set device as a WiFi station
-  WiFi.mode(WIFI_STA);
-
-  // Init ESP-NOW
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
-    return;
-  }
+  esp_now_peer_info_t peerInfo = {};
 
   // Once ESPNow is successfully Init, we will register for Send CB to
   // get the status of Transmitted packet
   esp_now_register_send_cb(esp_now_send_cb_t(OnDataSent));
 
+  // Once ESPNow is successfully Init, we will register for recv CB to
+  // get recv packer info
+  esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecv));
+
   // Register peer
   memcpy(peerInfo.peer_addr, gloveAddress, 6);
-  peerInfo.channel = 0;  
+  peerInfo.channel = 1;  
   peerInfo.encrypt = false;
   
   // Add peer  
-  if (esp_now_add_peer(&peerInfo) == ESP_OK)
+  while(esp_now_add_peer(&peerInfo) != ESP_OK)
   {
     Serial.println("Failed to add peer");
-    return;
-  }     
-  else
-  {
-    analogWrite(WIFI_LED, 255);
+    delay(1000);
   }
+
+  analogWrite(WIFI_LED, 255);
   
   while(true)
   {
-    //in out WIFI and MIDI code
+    esp_err_t result = esp_now_send(gloveAddress, (uint8_t *) &outBands, sizeof(outBands));
 
-    vTaskDelay(pdMS_TO_TICKS(1)); //Yeild CPU
+    if (result != ESP_OK) 
+    {
+      Serial.println("Error sending the data");
+    }
+
+  vTaskDelay(pdMS_TO_TICKS(1)); //Yeild CPU
   }
 }
 
