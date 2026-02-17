@@ -5,10 +5,9 @@
 
 /* ================= TEMPLATES ================= */
 #include "templates/templates_index.h"
-
 /* ================= CONFIG ================= */
 #define BUTTON_PIN 13
-#define LED_PIN 
+#define LED_PIN 11
 #define SYNC_PIN 12 // Used for syncing clocks
 #define N_SAMPLES 64 * 2 // Determines length of gesture collection
 #define AXES 6
@@ -22,7 +21,8 @@ float live[N_SAMPLES][AXES];
 int sampleCount = 0;
 
 /* ================= WIFI ================= */
-uint8_t broadcastAddress[] = {0xB8, 0xF8, 0x62, 0xD6, 0x43, 0x2C};
+// uint8_t broadcastAddress[] = {0xB8, 0xF8, 0x62, 0xD6, 0x43, 0x2C};
+uint8_t broadcastAddress[] = {0xB8, 0xF8, 0x62, 0xD5, 0xCD, 0x24};
 
 typedef struct struct_message {
   char gesture[32];
@@ -45,10 +45,11 @@ void InitWiFi(){
   // Once ESPNow is successfully Init, we will register for Send CB to
   // get the status of Trasnmitted packet
   esp_now_register_send_cb(esp_now_send_cb_t(OnDataSent));
-  
+  esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecv));
+
   // Register peer
   memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-  peerInfo.channel = 0;  
+  peerInfo.channel = 1;  
   peerInfo.encrypt = false;
   
   // Add peer        
@@ -72,6 +73,17 @@ typedef struct struct_message_in {
 } struct_message_in;
 
 struct_message_in inBands;
+
+// typedef struct struct_message_out {
+//   bool toggle1;
+// } struct_message_out;
+
+// struct_message_out outMidi;
+
+unsigned long startOfUnpackaging, startOfLED, ledsOn, frame1, frame2;
+bool ifKickOn = false;
+bool ifKickOff = true;
+
 
 /* ================= TEMPLATES ================= */
 struct GestureTemplate {
@@ -252,11 +264,95 @@ void CollectIMU() {
     }
 }
 
+/* ================= LEDS ==================*/
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) 
+{
+
+  startOfUnpackaging = micros();
+
+  memcpy(&inBands, incomingData, sizeof(inBands));
+  
+  // Serial.print(inBands.band1); Serial.print(", "); 
+  // Serial.print(inBands.band2); Serial.print(", ");
+  // Serial.print(inBands.band3); Serial.print(", ");
+  // Serial.print(inBands.band4); Serial.print(", ");
+  // Serial.print(inBands.band5); Serial.print(", "); 
+  // Serial.print(inBands.band6); Serial.println("; ");
+
+  if(inBands.band1 > 0 && ifKickOff == true)
+  {
+    ifKickOn = true;
+    ifKickOff = false;
+    frame2 = micros() - frame1;
+  }
+  frame1 = micros();
+
+  if(inBands.band1 == 0)
+  {
+    ifKickOff = true;
+  }
+
+  startOfLED = micros();
+
+  //band1 is the greatest: make it red
+  if((inBands.band1 > inBands.band2) && (inBands.band1 > inBands.band3)
+     && (inBands.band1 > inBands.band4) && (inBands.band1 > inBands.band5)
+     && (inBands.band1 > inBands.band6)) {
+      pixels.fill(pixels.Color(255 * inBands.band1, 0, 0), 0, 4);
+    }
+  //band2 is the greatest: make it arenge
+  else if((inBands.band2 > inBands.band1) && (inBands.band2 > inBands.band3)
+     && (inBands.band2 > inBands.band4) && (inBands.band2 > inBands.band5)
+     && (inBands.band2 > inBands.band6)) {
+      pixels.fill(pixels.Color(255 * inBands.band2, 100 * inBands.band2, 0), 0, 4);
+    }
+  //band 3 is the greatest: make it yellow
+  else if((inBands.band3 > inBands.band1) && (inBands.band3 > inBands.band2)
+     && (inBands.band3 > inBands.band4) && (inBands.band3 > inBands.band5)
+     && (inBands.band3 > inBands.band6)) {
+      pixels.fill(pixels.Color(255 * inBands.band3, 255 * inBands.band3, 0), 0, 4);
+    }
+  //band 4 is the greatest: make it green
+  else if((inBands.band4 > inBands.band1) && (inBands.band4 > inBands.band2)
+     && (inBands.band4 > inBands.band3) && (inBands.band4 > inBands.band5)
+     && (inBands.band4 > inBands.band6)) {
+      pixels.fill(pixels.Color(0, 255 * inBands.band4, 0), 0, 4);
+    }
+  
+  //band 5 is the greatest: make it blue
+  else if((inBands.band5 > inBands.band1) && (inBands.band5 > inBands.band2)
+     && (inBands.band5 > inBands.band3) && (inBands.band5 > inBands.band4)
+     && (inBands.band5 > inBands.band6)) {
+      pixels.fill(pixels.Color(0, 0, 255 * inBands.band5), 0, 4);
+    }
+
+  //band 6 is the greatest: make it violet 
+  else if((inBands.band6 > inBands.band1) && (inBands.band6 > inBands.band2)
+     && (inBands.band6 > inBands.band3) && (inBands.band6 > inBands.band4)
+     && (inBands.band6 > inBands.band5)) {
+      pixels.fill(pixels.Color(255 * inBands.band6, 0, 255 * inBands.band6), 0, 4);
+    }
+  pixels.setBrightness(100);
+  pixels.show();
+
+  ledsOn = micros();
+
+  if(ifKickOn == true)
+  {
+
+    Serial.println((String) "UNPACKAGING: " +(startOfLED - startOfUnpackaging)+ 
+                            " LEDS: " +(ledsOn - startOfLED)+
+                            " FRAME: " +frame2);
+    ifKickOn = false;
+  }
+}
 
 /* ================= SETUP ================= */
 void setup() {
   Serial.begin(115200);
   while (!Serial) {}
+
+  pixels.begin();
 
   pinMode(BUTTON_PIN, INPUT);
   pinMode(SYNC_PIN, OUTPUT);
