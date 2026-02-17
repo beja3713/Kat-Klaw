@@ -59,8 +59,14 @@ typedef struct struct_message_out {
 } struct_message_out;
 
 //MIDI controll input
+// typedef struct struct_message_in {
+//   bool toggle1;
+// } struct_message_in;
+
 typedef struct struct_message_in {
-  bool toggle1;
+  char gesture[32];
+  unsigned long sendMillis;
+  unsigned long syncMillis;
 } struct_message_in;
 
 struct_message_out outBands;
@@ -158,6 +164,9 @@ void setupADC()
 
 void setup() {
   Serial.begin(115200);
+
+  //Fill delay with toggle
+
 
   //Pins
   pinMode(AUDIO_PIN, INPUT);
