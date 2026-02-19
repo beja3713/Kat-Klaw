@@ -93,7 +93,83 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
 
 void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int len) {
   memcpy(&inBands, incomingData, sizeof(inBands));
-  // LED logic...
+  startOfUnpackaging = micros();
+
+  memcpy(&inBands, incomingData, sizeof(inBands));
+  
+  // Serial.print(inBands.band1); Serial.print(", "); 
+  // Serial.print(inBands.band2); Serial.print(", ");
+  // Serial.print(inBands.band3); Serial.print(", ");
+  // Serial.print(inBands.band4); Serial.print(", ");
+  // Serial.print(inBands.band5); Serial.print(", "); 
+  // Serial.print(inBands.band6); Serial.println("; ");
+
+  if(inBands.band1 > 0 && ifKickOff == true)
+  {
+    ifKickOn = true;
+    ifKickOff = false;
+    frame2 = micros() - frame1;
+  }
+  frame1 = micros();
+
+  if(inBands.band1 == 0)
+  {
+    ifKickOff = true;
+  }
+
+  startOfLED = micros();
+
+  //band1 is the greatest: make it red
+  if((inBands.band1 > inBands.band2) && (inBands.band1 > inBands.band3)
+     && (inBands.band1 > inBands.band4) && (inBands.band1 > inBands.band5)
+     && (inBands.band1 > inBands.band6)) {
+      pixels.fill(pixels.Color(255 * inBands.band1, 0, 0), 0, 4);
+    }
+  //band2 is the greatest: make it arenge
+  else if((inBands.band2 > inBands.band1) && (inBands.band2 > inBands.band3)
+     && (inBands.band2 > inBands.band4) && (inBands.band2 > inBands.band5)
+     && (inBands.band2 > inBands.band6)) {
+      pixels.fill(pixels.Color(255 * inBands.band2, 100 * inBands.band2, 0), 0, 4);
+    }
+  //band 3 is the greatest: make it yellow
+  else if((inBands.band3 > inBands.band1) && (inBands.band3 > inBands.band2)
+     && (inBands.band3 > inBands.band4) && (inBands.band3 > inBands.band5)
+     && (inBands.band3 > inBands.band6)) {
+      pixels.fill(pixels.Color(255 * inBands.band3, 255 * inBands.band3, 0), 0, 4);
+    }
+  //band 4 is the greatest: make it green
+  else if((inBands.band4 > inBands.band1) && (inBands.band4 > inBands.band2)
+     && (inBands.band4 > inBands.band3) && (inBands.band4 > inBands.band5)
+     && (inBands.band4 > inBands.band6)) {
+      pixels.fill(pixels.Color(0, 255 * inBands.band4, 0), 0, 4);
+    }
+  
+  //band 5 is the greatest: make it blue
+  else if((inBands.band5 > inBands.band1) && (inBands.band5 > inBands.band2)
+     && (inBands.band5 > inBands.band3) && (inBands.band5 > inBands.band4)
+     && (inBands.band5 > inBands.band6)) {
+      pixels.fill(pixels.Color(0, 0, 255 * inBands.band5), 0, 4);
+    }
+
+  //band 6 is the greatest: make it violet 
+  else if((inBands.band6 > inBands.band1) && (inBands.band6 > inBands.band2)
+     && (inBands.band6 > inBands.band3) && (inBands.band6 > inBands.band4)
+     && (inBands.band6 > inBands.band5)) {
+      pixels.fill(pixels.Color(255 * inBands.band6, 0, 255 * inBands.band6), 0, 4);
+    }
+  pixels.setBrightness(100);
+  pixels.show();
+
+  ledsOn = micros();
+
+  if(ifKickOn == true)
+  {
+
+    Serial.println((String) "UNPACKAGING: " +(startOfLED - startOfUnpackaging)+ 
+                            " LEDS: " +(ledsOn - startOfLED)+
+                            " FRAME: " +frame2);
+    ifKickOn = false;
+  }
 }
 
 
@@ -162,6 +238,7 @@ void classifyGesture() {
     strncpy(myData.gesture, gestures[bestIdx].name, sizeof(myData.gesture));
     myData.sendMillis = millis();
     esp_now_send(broadcastAddress, (uint8_t*)&myData, sizeof(myData));
+    Serial.println(gestures[bestIdx].name);
   } else {
     Serial.println("Unknown gesture");
   }
