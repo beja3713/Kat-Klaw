@@ -12,6 +12,8 @@ import os
 import serial
 import time
 
+
+
 # ------------------- Serial Setup -------------------
 SERIAL_PORT = "/dev/ttyACM0"  # or COM3 on Windows
 BAUD_RATE = 115200
@@ -672,13 +674,37 @@ while True:
     # ------------------ Flash Firmware ------------------
     elif event == "-FLASH-" and folder:
         print("Flashing Klaw firmware...")
+        if ser and ser.is_open:
+            try:
+                ser.close()
+            except:
+                pass
         flash_arduino()
+        time.sleep(2)
+
+        try:
+            ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0.05)
+        except Exception as e:
+            sg.popup_error(f"Could not reopen serial port:\n{e}") 
+
         sg.popup("Firmware flash complete!")
 
     elif event == "-FLASH-CLS-" and folder:
         build_all_templates(folder)
         print("Flashing classifier firmware...")
+        if ser and ser.is_open:
+            try:
+                ser.close()
+            except:
+                pass
         flash_classifier()
+
+        time.sleep(2)
+
+        try:
+            ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0.05)
+        except Exception as e:
+            sg.popup_error(f"Could not reopen serial port:\n{e}") 
 
 
     # ------------------ Add New Gesture ------------------
