@@ -220,7 +220,8 @@ void setupADC()
 }
 
 void DSPcode(void * pvParameters)
-{   
+{ 
+  Serial.println("WE IN HERE");
   uint8_t result[SAMPLES * 4];   // buffer for raw ADC data, 4 bytes per sample
   uint32_t ret_num = 0;          // number of bytes returned
 
@@ -273,10 +274,10 @@ void DSPcode(void * pvParameters)
       }
     }
 
-    if(smoothValues[0] == 0 && bandValues[0] > 0)
-    {
-      ifKick = true;
-    }
+    // if(smoothValues[0] == 0 && bandValues[0] > 0)
+    // {
+    //   ifKick = true;
+    // }
 
     for(int i = 0; i < BAND_COUNT; i++)
     {
@@ -291,12 +292,12 @@ void DSPcode(void * pvParameters)
 
     // startOfPackaging = micros();
 
-    // Serial.print(smoothValues[0]); Serial.print(", "); 
-    // Serial.print(smoothValues[1]); Serial.print(", ");
-    // Serial.print(smoothValues[2]); Serial.print(", ");
-    // Serial.print(smoothValues[3]); Serial.print(", ");
-    // Serial.print(smoothValues[4]); Serial.print(", "); 
-    // Serial.print(smoothValues[5]); Serial.println("; ");
+    Serial.print(smoothValues[0]); Serial.print(", "); 
+    Serial.print(smoothValues[1]); Serial.print(", ");
+    Serial.print(smoothValues[2]); Serial.print(", ");
+    Serial.print(smoothValues[3]); Serial.print(", ");
+    Serial.print(smoothValues[4]); Serial.print(", "); 
+    Serial.print(smoothValues[5]); Serial.println("; ");
 
     outBands.band1 = smoothValues[0];
     outBands.band2 = smoothValues[1];
@@ -344,7 +345,7 @@ void setup() {
   //Core designation
   xTaskCreatePinnedToCore(MIDIcode, "Task2", 20000, NULL, 1, &Task2, 0); //Pin task to core 0
   delay(100); 
-
+  Serial.println("WE ABOUT TO BE IN HERE");
   xTaskCreatePinnedToCore(DSPcode, "Task1", 20000, NULL, 1, &Task1, 1); //pin task to core 1                  
   delay(500); 
 }

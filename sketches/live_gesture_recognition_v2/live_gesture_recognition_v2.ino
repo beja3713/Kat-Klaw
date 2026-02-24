@@ -93,16 +93,16 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
 
 void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int len) {
   memcpy(&inBands, incomingData, sizeof(inBands));
-  startOfUnpackaging = micros();
+  // startOfUnpackaging = micros();
 
   memcpy(&inBands, incomingData, sizeof(inBands));
   
-  // Serial.print(inBands.band1); Serial.print(", "); 
-  // Serial.print(inBands.band2); Serial.print(", ");
-  // Serial.print(inBands.band3); Serial.print(", ");
-  // Serial.print(inBands.band4); Serial.print(", ");
-  // Serial.print(inBands.band5); Serial.print(", "); 
-  // Serial.print(inBands.band6); Serial.println("; ");
+  Serial.print(inBands.band1); Serial.print(", "); 
+  Serial.print(inBands.band2); Serial.print(", ");
+  Serial.print(inBands.band3); Serial.print(", ");
+  Serial.print(inBands.band4); Serial.print(", ");
+  Serial.print(inBands.band5); Serial.print(", "); 
+  Serial.print(inBands.band6); Serial.println("; ");
 
   if(inBands.band1 > 0 && ifKickOff == true)
   {
@@ -284,6 +284,8 @@ void CollectIMU() {
 void setup() {
   Serial.begin(115200);
   pixels.begin();
+  pixels.clear();
+  pixels.show();
 
   pinMode(BUTTON_PIN, INPUT);
   pinMode(SYNC_PIN, OUTPUT);
