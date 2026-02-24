@@ -6,6 +6,10 @@
 #include <Adafruit_TinyUSB.h>
 #include <MIDI.h>
 
+#include <Preferences.h>
+
+Preferences prefs;
+
 //Core differentiaiton
 TaskHandle_t Task1;
 TaskHandle_t Task2;
@@ -44,6 +48,8 @@ float bandValues[] = {0,0,0,0,0,0};
 float smoothValues[] = {0,0,0,0,0,0};
 
 //For Integraiton testing
+unsigned long startO
+
 unsigned long startOfBuffer, startOfFFT, startOfPackaging, ledDataSent;
 bool ifKick = false;
 bool send = false;
@@ -53,15 +59,21 @@ ArduinoFFT<float> FFT(vReal, vImag, SAMPLES, SAMPLING_FREQ);
 //Reciever mac adress
 uint8_t gloveAddress[] = {0x98, 0xa3, 0x16, 0x85, 0x18, 0xb0}; //XIAO glove standin
 
+QueueHandle_t gestureQueue;
+
+uint8_t nextAvailableNote;
+bool noteActive[128] = {false};
+
+struct GestureMap {
+  String name;
+  uint8_t note;
+};
+
+
 //FFT analysis output 
 typedef struct struct_message_out {
   float band1, band2, band3, band4, band5, band6;
 } struct_message_out;
-
-//MIDI controll input
-// typedef struct struct_message_in {
-//   bool toggle1;
-// } struct_message_in;
 
 typedef struct struct_message_in {
   char gesture[32];
@@ -71,6 +83,25 @@ typedef struct struct_message_in {
 
 struct_message_out outBands;
 struct_message_in inMidi;
+
+// Lookup Function
+
+uint8_t getNoteForGesture(const char* gesture)
+{
+    uint8_t storedNote = prefs.getUChar(gesture, 255);
+
+    if (storedNote != 255)
+        return storedNote;
+
+    if (nextAvailableNote > 127)
+        nextAvailableNote = 60;   // prevent overflow
+
+    storedNote = nextAvailableNote++;
+    prefs.putUChar(gesture, storedNote);
+    prefs.putUChar("nextNote", nextAvailableNote);
+
+    return storedNote;
+}
 
 /*-------------------------------------------------*/
 
@@ -102,16 +133,67 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
 //When data is had
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) 
 {
-  memcpy(&inMidi, incomingData, sizeof(inMidi));
-  Serial.println("MIDI data revieved:");
+    struct_message_in temp;
+    memcpy(&temp, incomingData, sizeof(temp));
 
-  if(inMidi.toggle1 == true) MIDI.sendNoteOn(0, 127, 1); //Note 0, velcity 127, channel 1
-  else if(inMidi.toggle1 == false) MIDI. sendNoteOff(0, 127, 1);
-  
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xQueueSendFromISR(gestureQueue, &temp, &xHigherPriorityTaskWoken);
+
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 //Setup funciton for I2S based buffer
 adc_continuous_handle_t adc_cont_handle = NULL;
+
+void sendGestureNote(int note)
+{
+  MIDI.sendNoteOn(note, 127, 1);
+  delay(5);
+  MIDI.sendNoteOff(note, 0, 1);
+}
+
+void MIDIcode(void* pvParameters)
+{
+    vTaskDelay(pdMS_TO_TICKS(500));
+
+    esp_now_peer_info_t peerInfo = {};
+    esp_now_register_send_cb(OnDataSent);
+    esp_now_register_recv_cb(OnDataRecv);
+
+    memcpy(peerInfo.peer_addr, gloveAddress, 6);
+    peerInfo.channel = 1;
+    peerInfo.encrypt = false;
+
+    while (esp_now_add_peer(&peerInfo) != ESP_OK)
+    {
+        delay(1000);
+    }
+
+    analogWrite(WIFI_LED, 255);
+
+    struct_message_in receivedGesture;
+
+    while (true)
+    {
+        if (xQueueReceive(gestureQueue, &receivedGesture, portMAX_DELAY) == pdTRUE)
+        {
+            uint8_t note = getNoteForGesture(receivedGesture.gesture);
+
+            // If not already active, send NoteOn
+            if (!noteActive[note])
+            {
+                MIDI.sendNoteOn(note, 127, 1);
+                noteActive[note] = true;
+            }
+
+            // Optional: auto note off after short time
+            vTaskDelay(pdMS_TO_TICKS(20));
+
+            MIDI.sendNoteOff(note, 0, 1);
+            noteActive[note] = false;
+        }
+    }
+}
 
 void setupADC()
 {
@@ -159,42 +241,6 @@ void setupADC()
     return;
   }
 }
-
-/*-------------------------------------------------*/
-
-void setup() {
-  Serial.begin(115200);
-
-  //Fill delay with toggle
-
-
-  //Pins
-  pinMode(AUDIO_PIN, INPUT);
-  pinMode(PEAK_LED, OUTPUT);
-
-  //Start MIDI
-  MIDI.begin();
-
-  //Set device as a WiFi station
-  WiFi.mode(WIFI_STA);
-
-  // Init ESP-NOW
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
-    return;
-  }
-
-  setupADC();
-
-  //Core designation
-  xTaskCreatePinnedToCore(MIDIcode, "Task2", 20000, NULL, 1, &Task2, 0); //Pin task to core 0
-  delay(100); 
-
-  xTaskCreatePinnedToCore(DSPcode, "Task1", 20000, NULL, 1, &Task1, 1); //pin task to core 1                  
-  delay(500); 
-}
-
-/*-------------------------------------------------*/
 
 void DSPcode(void * pvParameters)
 {   
@@ -288,42 +334,42 @@ void DSPcode(void * pvParameters)
   }
 }
 
-void MIDIcode(void* pvParameters)
-{
-  vTaskDelay(pdMS_TO_TICKS(500));
-  //Esp32 WiFi
-  esp_now_peer_info_t peerInfo = {};
+/*-------------------------------------------------*/
 
-  // Regester to get transmited package status
-  esp_now_register_send_cb(esp_now_send_cb_t(OnDataSent));
+void setup() {
+  Serial.begin(115200);
 
-  // Register to get recieved package status
-  esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecv));
+  //Fill delay with toggle
 
-  // Register peer
-  memcpy(peerInfo.peer_addr, gloveAddress, 6);
-  peerInfo.channel = 1;  
-  peerInfo.encrypt = false;
-  
-  // Add peer  
-  while(esp_now_add_peer(&peerInfo) != ESP_OK)
-  {
-    Serial.println("Failed to add peer");
-    delay(1000);
+
+  //Pins
+  pinMode(AUDIO_PIN, INPUT);
+  pinMode(PEAK_LED, OUTPUT);
+
+  //Start MIDI
+  MIDI.begin();
+
+  //Set device as a WiFi station
+  WiFi.mode(WIFI_STA);
+
+  // Init ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error initializing ESP-NOW");
+    return;
   }
 
-  analogWrite(WIFI_LED, 255);
-  
-  while(true)
-  {
-    if(send == true)
-    {
-      esp_err_t result = esp_now_send(gloveAddress, (uint8_t *) &outBands, sizeof(outBands));
-      send = false;
-    }
+  setupADC();
+  prefs.begin("gestureMap", false);
+  nextAvailableNote = prefs.getUChar("nextNote", 60);
 
-    vTaskDelay(pdMS_TO_TICKS(1)); //Yeild CPU
-  }
+  gestureQueue = xQueueCreate(10, sizeof(struct_message_in));
+
+  //Core designation
+  xTaskCreatePinnedToCore(MIDIcode, "Task2", 20000, NULL, 1, &Task2, 0); //Pin task to core 0
+  delay(100); 
+
+  xTaskCreatePinnedToCore(DSPcode, "Task1", 20000, NULL, 1, &Task1, 1); //pin task to core 1                  
+  delay(500); 
 }
 
 /*-------------------------------------------------*/
