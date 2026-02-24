@@ -21,8 +21,8 @@
 /* ================= STRUCTS ================= */
 typedef struct struct_message {
   char gesture[32];
-  unsigned long sendMillis;
-  unsigned long syncMillis;
+  // unsigned long sendMillis;
+  // unsigned long syncMillis;
 } struct_message;
 
 typedef struct struct_message_in {
@@ -236,7 +236,7 @@ void classifyGesture() {
 
   if (bestIdx >= 0) {
     strncpy(myData.gesture, gestures[bestIdx].name, sizeof(myData.gesture));
-    myData.sendMillis = millis();
+    // myData.sendMillis = millis();
     esp_now_send(broadcastAddress, (uint8_t*)&myData, sizeof(myData));
     Serial.println(gestures[bestIdx].name);
   } else {
@@ -252,7 +252,7 @@ void CollectIMU() {
   int buttonState = digitalRead(BUTTON_PIN);
 
   if (buttonState == HIGH && !buttonWasHigh) {
-    pressStart = millis();
+    // pressStart = millis();
     buttonWasHigh = true;
     sampleCount = 0;
   }

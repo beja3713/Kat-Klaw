@@ -65,8 +65,8 @@ typedef struct struct_message_out {
 
 typedef struct struct_message_in {
   char gesture[32];
-  unsigned long sendMillis;
-  unsigned long syncMillis;
+  // unsigned long sendMillis;
+  // unsigned long syncMillis;
 } struct_message_in;
 
 struct_message_out outBands;
