@@ -48,7 +48,7 @@ float bandValues[] = {0,0,0,0,0,0};
 float smoothValues[] = {0,0,0,0,0,0};
 
 //For Integraiton testing
-unsigned long startO
+// unsigned long startO
 
 unsigned long startOfBuffer, startOfFFT, startOfPackaging, ledDataSent;
 bool ifKick = false;
@@ -105,33 +105,17 @@ uint8_t getNoteForGesture(const char* gesture)
 
 /*-------------------------------------------------*/
 
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) 
+void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
 {
-  if(status == ESP_NOW_SEND_SUCCESS)
-  {
-    //Serial.println("Delivery Success");
+  if (status == ESP_NOW_SEND_SUCCESS) {
     analogWrite(WIFI_LED, 255);
-
-    ledDataSent = micros();
-
-  if(ifKick == true)
-    {
-      Serial.println((String) "BUFFER: " +(startOfFFT - startOfBuffer)+ 
-                          " FFT: " +(startOfPackaging - startOfFFT)+
-                          " PACKAGING: " +(ledDataSent - startOfPackaging)+
-                          " WIFI: " +(ledDataSent - startOfPackaging));
-      ifKick = false;
-    }
-  }
-  else
-  {
-    //Serial.println("Delivery Fail");
-    analogWrite(WIFI_LED, 0); 
+  } else {
+    analogWrite(WIFI_LED, 0);
   }
 }
 
 //When data is had
-void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) 
+void OnDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len)
 {
     struct_message_in temp;
     memcpy(&temp, incomingData, sizeof(temp));
@@ -145,15 +129,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len)
 //Setup funciton for I2S based buffer
 adc_continuous_handle_t adc_cont_handle = NULL;
 
-void sendGestureNote(int note)
-{
-  MIDI.sendNoteOn(note, 127, 1);
-  delay(5);
-  MIDI.sendNoteOff(note, 0, 1);
-}
-
-void MIDIcode(void* pvParameters)
-{
+void MIDIcode(void* pvParameters){
     vTaskDelay(pdMS_TO_TICKS(500));
 
     esp_now_peer_info_t peerInfo = {};
@@ -183,6 +159,7 @@ void MIDIcode(void* pvParameters)
             if (!noteActive[note])
             {
                 MIDI.sendNoteOn(note, 127, 1);
+                Serial.println(note);
                 noteActive[note] = true;
             }
 
@@ -249,7 +226,7 @@ void DSPcode(void * pvParameters)
 
   while(true)
   {
-    if(ifKick == false) startOfBuffer = micros();
+    // if(ifKick == false) startOfBuffer = micros();
 
     for(int i = 0; i < BAND_COUNT; i++)
     {
@@ -275,7 +252,7 @@ void DSPcode(void * pvParameters)
     analogWrite(PEAK_LED, peakBrightness);
     if(peakBrightness > 0) peakBrightness -=10;
 
-    startOfFFT = micros();
+    // startOfFFT = micros();
 
     FFT.dcRemoval();
     FFT.windowing(FFT_WIN_TYP_HAMMING, FFT_FORWARD);
@@ -312,7 +289,7 @@ void DSPcode(void * pvParameters)
       smoothValues[i] = 0.3 * smoothValues[i] + 0.7 * bandValues[i];
     }
 
-    startOfPackaging = micros();
+    // startOfPackaging = micros();
 
     // Serial.print(smoothValues[0]); Serial.print(", "); 
     // Serial.print(smoothValues[1]); Serial.print(", ");
