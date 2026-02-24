@@ -316,7 +316,7 @@ void DSPcode(void * pvParameters)
 
 void setup() {
   Serial.begin(115200);
-
+  while(!Serial);
   //Fill delay with toggle
 
 
@@ -335,13 +335,13 @@ void setup() {
     Serial.println("Error initializing ESP-NOW");
     return;
   }
-
+  Serial.println("ASS");
   setupADC();
   prefs.begin("gestureMap", false);
   nextAvailableNote = prefs.getUChar("nextNote", 60);
 
   gestureQueue = xQueueCreate(10, sizeof(struct_message_in));
-
+  Serial.println("BITCH");
   //Core designation
   xTaskCreatePinnedToCore(MIDIcode, "Task2", 20000, NULL, 1, &Task2, 0); //Pin task to core 0
   delay(100); 
