@@ -97,12 +97,12 @@ void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
 
   memcpy(&inBands, incomingData, sizeof(inBands));
   
-  Serial.print(inBands.band1); Serial.print(", "); 
-  Serial.print(inBands.band2); Serial.print(", ");
-  Serial.print(inBands.band3); Serial.print(", ");
-  Serial.print(inBands.band4); Serial.print(", ");
-  Serial.print(inBands.band5); Serial.print(", "); 
-  Serial.print(inBands.band6); Serial.println("; ");
+  // Serial.print(inBands.band1); Serial.print(", "); 
+  // Serial.print(inBands.band2); Serial.print(", ");
+  // Serial.print(inBands.band3); Serial.print(", ");
+  // Serial.print(inBands.band4); Serial.print(", ");
+  // Serial.print(inBands.band5); Serial.print(", "); 
+  // Serial.print(inBands.band6); Serial.println("; ");
 
   if(inBands.band1 > 0 && ifKickOff == true)
   {
