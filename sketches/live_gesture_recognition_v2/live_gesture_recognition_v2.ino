@@ -6,7 +6,7 @@
 #include "templates/templates_index.h"
 
 /* ================= CONFIG ================= */
-#define BUTTON_PIN 13
+#define BUTTON_PIN 5
 #define LED_PIN 11
 #define SYNC_PIN 12
 #define N_SAMPLES 64 * 2
