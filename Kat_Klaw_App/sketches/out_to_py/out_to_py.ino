@@ -6,13 +6,12 @@ void setup() {
   Serial.begin(115200);
   while (!Serial) {}
   delay(1000);
-
-    pinMode(button_pin, INPUT_PULLUP);
-
   if (!IMU.begin()) {
     Serial.println("Failed to initialize IMU!");
     while (1);
   }
+
+  pinMode(button_pin, INPUT);
 
   Serial.println("ax,ay,az,gx,gy,gz");  // CSV header
 }
