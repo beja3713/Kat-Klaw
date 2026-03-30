@@ -29,31 +29,31 @@ INA226 INA(0x40);
 
 // ---------------- Indicator LEDs ----------------
 // #define LED_PIN    6
-#define LED_COUNT  67
+#define LED_COUNT 67
 
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // ---------------- Test LED Strips ----------------
-#define PIN_D9    9
-#define PIN_D10   10
-#define PIN_D11   11
-#define PIN_D12   12
-#define PIN_D13   13
+#define PIN_D9 9
+#define PIN_D10 10
+#define PIN_D11 11
+#define PIN_D12 12
+#define PIN_D13 13
 
-#define LEDS_D9   20
-#define LEDS_D10  22
-#define LEDS_D11  28
-#define LEDS_D12  144
-#define LEDS_D13  30
+#define LEDS_D9 20
+#define LEDS_D10 22
+#define LEDS_D11 28
+#define LEDS_D12 144
+#define LEDS_D13 30
 
-Adafruit_NeoPixel stripD9 (LEDS_D9,  PIN_D9,  NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel stripD9(LEDS_D9, PIN_D9, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel stripD10(LEDS_D10, PIN_D10, NEO_GRB + NEO_KHZ800);
 // Adafruit_NeoPixel stripD11(LEDS_D11, PIN_D11, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel stripD12(LEDS_D12, PIN_D12, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel stripD13(LEDS_D13, PIN_D13, NEO_GRB + NEO_KHZ800);
 
 // ---------------- Battery thresholds ----------------
-const float BATTERY_FULL_V    = 12.6;
+const float BATTERY_FULL_V = 12.6;
 const float BATTERY_SHUTOFF_V = 8.4;
 const float FLASH_THRESHOLD_V = 8.8;
 
@@ -84,10 +84,9 @@ void showBatteryColor(float batteryVoltage) {
   if (batteryVoltage < FLASH_THRESHOLD_V) batteryVoltage = FLASH_THRESHOLD_V;
 
   float fraction =
-      (batteryVoltage - FLASH_THRESHOLD_V) /
-      (BATTERY_FULL_V - FLASH_THRESHOLD_V);
+    (batteryVoltage - FLASH_THRESHOLD_V) / (BATTERY_FULL_V - FLASH_THRESHOLD_V);
 
-  uint8_t red   = (uint8_t)(255.0f * (1.0f - fraction));
+  uint8_t red = (uint8_t)(255.0f * (1.0f - fraction));
   uint8_t green = (uint8_t)(255.0f * fraction);
 
   setAllLEDs(red, green, 0);
@@ -121,7 +120,7 @@ typedef struct struct_message_in {
 } struct_message_in;
 
 struct GestureTemplate {
-  const char* name;
+  const char *name;
   const float (*data)[AXES];
 };
 
@@ -130,7 +129,7 @@ float live[N_SAMPLES][AXES];
 int sampleCount = 0;
 
 // uint8_t broadcastAddress[] = {0xB8, 0xF8, 0x62, 0xD5, 0xCD, 0x24};
-uint8_t broadcastAddress[] = {0x1C, 0xDB, 0xD4, 0x40, 0x63, 0x0C};
+uint8_t broadcastAddress[] = { 0x1C, 0xDB, 0xD4, 0x40, 0x63, 0x0C };
 
 
 struct_message myData;
@@ -158,7 +157,7 @@ float cosineDTW(const float tmpl[N_SAMPLES][AXES]);
 static inline float cosineDistance(const float a[AXES], const float b[AXES]);
 
 /* ================= WIFI ================= */
-void InitWiFi(){
+void InitWiFi() {
   WiFi.mode(WIFI_STA);
 
   if (esp_now_init() != ESP_OK) {
@@ -170,10 +169,10 @@ void InitWiFi(){
   esp_now_register_recv_cb(OnDataRecv);
 
   memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-  peerInfo.channel = 1;  
+  peerInfo.channel = 1;
   peerInfo.encrypt = false;
-  
-  if (esp_now_add_peer(&peerInfo) != ESP_OK){
+
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
     Serial.println("Failed to add peer");
     return;
   }
@@ -189,78 +188,73 @@ void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
   // startOfUnpackaging = micros();
 
   memcpy(&inBands, incomingData, sizeof(inBands));
-  
-  // Serial.print(inBands.band1); Serial.print(", "); 
+
+  // Serial.print(inBands.band1); Serial.print(", ");
   // Serial.print(inBands.band2); Serial.print(", ");
   // Serial.print(inBands.band3); Serial.print(", ");
   // Serial.print(inBands.band4); Serial.print(", ");
-  // Serial.print(inBands.band5); Serial.print(", "); 
+  // Serial.print(inBands.band5); Serial.print(", ");
   // Serial.print(inBands.band6); Serial.println("; ");
 
-  if(inBands.band1 > 0 && ifKickOff == true)
-  {
+  if (inBands.band1 > 0 && ifKickOff == true) {
     ifKickOn = true;
     ifKickOff = false;
     frame2 = micros() - frame1;
   }
   frame1 = micros();
 
-  if(inBands.band1 == 0)
-  {
+  if (inBands.band1 == 0) {
     ifKickOff = true;
   }
 
   startOfLED = micros();
 
   //band1 is the greatest: make it red
-  if((inBands.band1 > inBands.band2) && (inBands.band1 > inBands.band3)
-     && (inBands.band1 > inBands.band4) && (inBands.band1 > inBands.band5)
-     && (inBands.band1 > inBands.band6)) {
-      pixels.fill(pixels.Color(255 * inBands.band1, 0, 0), 0, LED_COUNT);
-    }
+  if ((inBands.band1 > inBands.band2) && (inBands.band1 > inBands.band3)
+      && (inBands.band1 > inBands.band4) && (inBands.band1 > inBands.band5)
+      && (inBands.band1 > inBands.band6)) {
+    pixels.fill(pixels.Color(255 * inBands.band1, 0, 0), 0, LED_COUNT);
+  }
   //band2 is the greatest: make it arenge
-  else if((inBands.band2 > inBands.band1) && (inBands.band2 > inBands.band3)
-     && (inBands.band2 > inBands.band4) && (inBands.band2 > inBands.band5)
-     && (inBands.band2 > inBands.band6)) {
-      pixels.fill(pixels.Color(255 * inBands.band2, 100 * inBands.band2, 0), 0, LED_COUNT);
-    }
+  else if ((inBands.band2 > inBands.band1) && (inBands.band2 > inBands.band3)
+           && (inBands.band2 > inBands.band4) && (inBands.band2 > inBands.band5)
+           && (inBands.band2 > inBands.band6)) {
+    pixels.fill(pixels.Color(255 * inBands.band2, 100 * inBands.band2, 0), 0, LED_COUNT);
+  }
   //band 3 is the greatest: make it yellow
-  else if((inBands.band3 > inBands.band1) && (inBands.band3 > inBands.band2)
-     && (inBands.band3 > inBands.band4) && (inBands.band3 > inBands.band5)
-     && (inBands.band3 > inBands.band6)) {
-      pixels.fill(pixels.Color(255 * inBands.band3, 255 * inBands.band3, 0), 0, LED_COUNT);
-    }
+  else if ((inBands.band3 > inBands.band1) && (inBands.band3 > inBands.band2)
+           && (inBands.band3 > inBands.band4) && (inBands.band3 > inBands.band5)
+           && (inBands.band3 > inBands.band6)) {
+    pixels.fill(pixels.Color(255 * inBands.band3, 255 * inBands.band3, 0), 0, LED_COUNT);
+  }
   //band 4 is the greatest: make it green
-  else if((inBands.band4 > inBands.band1) && (inBands.band4 > inBands.band2)
-     && (inBands.band4 > inBands.band3) && (inBands.band4 > inBands.band5)
-     && (inBands.band4 > inBands.band6)) {
-      pixels.fill(pixels.Color(0, 255 * inBands.band4, 0), 0, LED_COUNT);
-    }
-  
-  //band 5 is the greatest: make it blue
-  else if((inBands.band5 > inBands.band1) && (inBands.band5 > inBands.band2)
-     && (inBands.band5 > inBands.band3) && (inBands.band5 > inBands.band4)
-     && (inBands.band5 > inBands.band6)) {
-      pixels.fill(pixels.Color(0, 0, 255 * inBands.band5), 0, LED_COUNT);
-    }
+  else if ((inBands.band4 > inBands.band1) && (inBands.band4 > inBands.band2)
+           && (inBands.band4 > inBands.band3) && (inBands.band4 > inBands.band5)
+           && (inBands.band4 > inBands.band6)) {
+    pixels.fill(pixels.Color(0, 255 * inBands.band4, 0), 0, LED_COUNT);
+  }
 
-  //band 6 is the greatest: make it violet 
-  else if((inBands.band6 > inBands.band1) && (inBands.band6 > inBands.band2)
-     && (inBands.band6 > inBands.band3) && (inBands.band6 > inBands.band4)
-     && (inBands.band6 > inBands.band5)) {
-      pixels.fill(pixels.Color(255 * inBands.band6, 0, 255 * inBands.band6), 0, LED_COUNT);
-    }
+  //band 5 is the greatest: make it blue
+  else if ((inBands.band5 > inBands.band1) && (inBands.band5 > inBands.band2)
+           && (inBands.band5 > inBands.band3) && (inBands.band5 > inBands.band4)
+           && (inBands.band5 > inBands.band6)) {
+    pixels.fill(pixels.Color(0, 0, 255 * inBands.band5), 0, LED_COUNT);
+  }
+
+  //band 6 is the greatest: make it violet
+  else if ((inBands.band6 > inBands.band1) && (inBands.band6 > inBands.band2)
+           && (inBands.band6 > inBands.band3) && (inBands.band6 > inBands.band4)
+           && (inBands.band6 > inBands.band5)) {
+    pixels.fill(pixels.Color(255 * inBands.band6, 0, 255 * inBands.band6), 0, LED_COUNT);
+  }
   pixels.setBrightness(100);
   pixels.show();
 
   ledsOn = micros();
 
-  if(ifKickOn == true)
-  {
+  if (ifKickOn == true) {
 
-    Serial.println((String) "UNPACKAGING: " +(startOfLED - startOfUnpackaging)+ 
-                            " LEDS: " +(ledsOn - startOfLED)+
-                            " FRAME: " +frame2);
+    Serial.println((String) "UNPACKAGING: " + (startOfLED - startOfUnpackaging) + " LEDS: " + (ledsOn - startOfLED) + " FRAME: " + frame2);
     ifKickOn = false;
   }
 }
@@ -277,13 +271,12 @@ void setupTemplates() {
 /* ================= DTW ================= */
 static inline float cosineDistance(
   const float a[AXES],
-  const float b[AXES]
-) {
+  const float b[AXES]) {
   float dot = 0, na = 0, nb = 0;
   for (int j = 0; j < AXES; j++) {
     dot += a[j] * b[j];
-    na  += a[j] * a[j];
-    nb  += b[j] * b[j];
+    na += a[j] * a[j];
+    nb += b[j] * b[j];
   }
   if (na <= 0 || nb <= 0) return 1.0f;
   return 1.0f - (dot / (sqrtf(na) * sqrtf(nb)));
@@ -330,7 +323,7 @@ void classifyGesture() {
   if (bestIdx >= 0) {
     strncpy(myData.gesture, gestures[bestIdx].name, sizeof(myData.gesture));
     // myData.sendMillis = millis();
-    esp_now_send(broadcastAddress, (uint8_t*)&myData, sizeof(myData));
+    esp_now_send(broadcastAddress, (uint8_t *)&myData, sizeof(myData));
     Serial.println(gestures[bestIdx].name);
   } else {
     Serial.println("Unknown gesture");
@@ -344,13 +337,12 @@ void CollectIMU() {
 
   int buttonState = digitalRead(BUTTON_PIN);
 
-  if (buttonState == HIGH && !buttonWasHigh) {
-    // pressStart = millis();
+  if (buttonState == LOW && !buttonWasHigh) {
     buttonWasHigh = true;
     sampleCount = 0;
   }
 
-  if (buttonState == HIGH && sampleCount < N_SAMPLES) {
+  if (buttonState == LOW && sampleCount < N_SAMPLES) {
     float ax, ay, az, gx, gy, gz;
     while (!IMU.accelerationAvailable() || !IMU.gyroscopeAvailable()) {}
     IMU.readAcceleration(ax, ay, az);
@@ -367,7 +359,7 @@ void CollectIMU() {
     delay(SAMPLE_DELAY_MS);
   }
 
-  if (buttonState == LOW && buttonWasHigh) {
+  if (buttonState == HIGH && buttonWasHigh) {
     buttonWasHigh = false;
     if (sampleCount > 0) classifyGesture();
   }
@@ -380,11 +372,11 @@ void setup() {
 
   Wire.begin();
 
-   if (!INA.begin()) {
-  Serial.println("INA226 not detected");
-} else {
-  Serial.println("INA226 OK");
-}
+  if (!INA.begin()) {
+    Serial.println("INA226 not detected");
+  } else {
+    Serial.println("INA226 OK");
+  }
 
   INA.setMaxCurrentShunt(10.0, 0.005);
 
@@ -396,9 +388,9 @@ void setup() {
   pinMode(SYNC_PIN, OUTPUT);
 
   // Wire.begin();
-  
 
- 
+
+
 
   strip.begin();
   strip.setBrightness(LED_BRIGHTNESS);
@@ -420,10 +412,10 @@ void setup() {
   setupTemplates();
 
   if (!IMU.begin()) {
-  Serial.println("IMU failed");
-} else {
-  Serial.println("IMU OK");
-}
+    Serial.println("IMU failed");
+  } else {
+    Serial.println("IMU OK");
+  }
 
   InitWiFi();
   Serial.println("ESP32 Gesture Classifier Ready");
@@ -434,11 +426,6 @@ void loop() {
   float currentA = INA.getCurrent();
   float powerW = INA.getPower();
 
-  Serial.print(batteryVoltage, 3);
-  Serial.print("\t\t");
-  Serial.print(currentA, 3);
-  Serial.print("\t\t");
-  Serial.println(powerW, 3);
   // float batteryVoltage = INA.getBusVoltage();
   // // Battery indicator strip
   // if (batteryVoltage <= FLASH_THRESHOLD_V) {
@@ -454,5 +441,5 @@ void loop() {
   setStripColor(stripD12, 255, 255, 255);
   setStripColor(stripD13, 255, 255, 255);
 
-  // CollectIMU();
+  CollectIMU();
 }

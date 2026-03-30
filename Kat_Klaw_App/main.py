@@ -340,7 +340,7 @@ def average_gesture(project_folder, gesture, target_samples=64):
     return out.values.tolist()
 
 
-def record_gesture(gesture_name, project_folder):
+def record_gesture(ser, gesture_name, project_folder):
     import serial
     import csv
     import time
@@ -360,15 +360,15 @@ def record_gesture(gesture_name, project_folder):
     OUTPUT_FOLDER = os.path.join(project_folder, "normalized_gestures")
     os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-    try:
-        ser = serial.Serial(PORT, BAUD, timeout=0.05)
-    except Exception as e:
-        sg.popup_error(
-            "Device not connected\n\n"
-            f"Could not open {PORT}\n\n"
-            f"{e}"
-        )
-        return
+    # try:
+    #     # ser = serial.Serial(PORT, BAUD, timeout=0.05)
+    # except Exception as e:
+    #     sg.popup_error(
+    #         "Device not connected\n\n"
+    #         f"Could not open {PORT}\n\n"
+    #         f"{e}"
+    #     )
+    #     return
 
     print("Waiting for serial data...")
     # ------------------ Add Popup for Waiting ------------------
@@ -386,7 +386,7 @@ def record_gesture(gesture_name, project_folder):
     while True:
         if time.time() - wait_start > START_TIMEOUT:
             waiting_popup.close()
-            raise TimeoutError("No serial data received")
+            # raise TimeoutError("No serial data received")
 
         line = ser.readline().decode(errors="ignore").strip()
         if line.count(",") == 5:
@@ -398,20 +398,20 @@ def record_gesture(gesture_name, project_folder):
             waiting_popup.close()
             break
 
-    wait_start = time.time()
-    rows = []
+    # wait_start = time.time()
+    # rows = []
 
     # wait for start
-    while True:
-        if time.time() - wait_start > START_TIMEOUT:
-            raise TimeoutError("No serial data received")
+    # while True:
+    #     # if time.time() - wait_start > START_TIMEOUT:
+    #         # raise TimeoutError("No serial data received")
 
-        line = ser.readline().decode(errors="ignore").strip()
-        if line.count(",") == 5:
-            gesture_start = time.time()
-            last_data_time = gesture_start
-            rows.append([0.0] + line.split(","))
-            break
+    #     line = ser.readline().decode(errors="ignore").strip()
+    #     if line.count(",") == 5:
+    #         gesture_start = time.time()
+    #         last_data_time = gesture_start
+    #         rows.append([0.0] + line.split(","))
+    #         break
 
     # record
     while True:
@@ -729,8 +729,9 @@ while True:
         was_empty = gesture not in gesture_groups or len(gesture_groups[gesture]) == 0
 
         # Record the gesture
-        record_gesture(gesture, folder)
-
+        recording = True
+        record_gesture(ser, gesture, folder)
+        recording = False
         # Refresh window ONLY if this was the first CSV for a new label
         if was_empty:
             window.close()

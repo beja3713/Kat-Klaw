@@ -1,11 +1,14 @@
 #include <Arduino_LSM6DSOX.h>
 
-const int button_pin = 13;
+const int button_pin = 5;
 
 void setup() {
   Serial.begin(115200);
   while (!Serial) {}
   delay(1000);
+
+    pinMode(button_pin, INPUT_PULLUP);
+
   if (!IMU.begin()) {
     Serial.println("Failed to initialize IMU!");
     while (1);
@@ -18,7 +21,7 @@ void loop() {
   float ax, ay, az;
   float gx, gy, gz;
 
-  if (IMU.accelerationAvailable() && IMU.gyroscopeAvailable() && digitalRead(button_pin)) {
+  if (IMU.accelerationAvailable() && IMU.gyroscopeAvailable() && !digitalRead(button_pin)) {
     IMU.readAcceleration(ax, ay, az);
     IMU.readGyroscope(gx, gy, gz);
 
