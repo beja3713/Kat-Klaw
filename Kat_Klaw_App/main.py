@@ -15,7 +15,7 @@ import time
 
 
 # ------------------- Serial Setup -------------------
-SERIAL_PORT = "/dev/ttyACM0"  # or COM3 on Windows
+SERIAL_PORT = "/dev/tty.usbmodem101"  # or COM3 on Windows
 BAUD_RATE = 115200
 
 try:
@@ -43,7 +43,7 @@ sg.theme_element_background_color('white')
 
 def flash_arduino():
     CLI = os.path.join("tools", "arduino-cli")
-    PORT = "/dev/ttyACM0"   # COM3 on Windows
+    PORT = "/dev/tty.usbmodem101" # COM3 on Windows
     FQBN = "esp32:esp32:adafruit_feather_esp32s3"
     SKETCH = os.path.join("sketches", "out_to_py")
     # SKETCH = "py_to_ino.py"
@@ -78,7 +78,7 @@ def flash_arduino():
 
 def flash_classifier():
     CLI = os.path.join("tools", "arduino-cli")
-    PORT = "/dev/ttyACM0"
+    PORT = "/dev/tty.usbmodem101"
     FQBN = "esp32:esp32:adafruit_feather_esp32s3"
     SKETCH = os.path.join("sketches", "live_gesture_recognition_v2")  
     # folder that contains THIS .ino
@@ -230,30 +230,43 @@ def load_csv(path):
     return data
 
 
-def draw_plot(canvas, data):
-    for child in canvas.winfo_children():
+def draw_plot(canvas_widget, data):
+    """
+    canvas_widget: Can be window['-CANVAS-'] OR window['-CANVAS-'].TKCanvas
+    data: The CSV data list
+    """
+    # 1. Figure out if we were passed the GUI element or the raw widget
+    # If it has 'TKCanvas', it's the element. If not, it's the widget.
+    real_tk_canvas = getattr(canvas_widget, "TKCanvas", canvas_widget)
+
+    # 2. Clear previous drawings and child widgets safely
+    real_tk_canvas.delete("all")
+    for child in real_tk_canvas.winfo_children():
         child.destroy()
 
-    fig, ax = plt.subplots(figsize=(5, 4))
+    # 3. Setup the Figure (Avoid plt.subplots to prevent Mac crashes)
+    from matplotlib.figure import Figure
+    fig = Figure(figsize=(5, 4), dpi=100)
+    ax = fig.add_subplot(111)
 
-    # Skip first column (time)
-    data = [row[1:] for row in data]
-    data = list(zip(*data))  # transpose rows → columns
-
+    # 4. Prepare and Plot Data
+    # Assuming data[0] is headers or 't', we slice rows and transpose
+    plot_data = [row[1:] for row in data]
+    columns = list(zip(*plot_data))
     labels = ["ax", "ay", "az", "gx", "gy", "gz"]
 
-    for i, col in enumerate(data):
-        ax.plot(col, label=labels[i])
+    for i, col in enumerate(columns):
+        if i < len(labels):
+            ax.plot(col, label=labels[i])
 
     ax.set_title("Gesture Preview")
-    ax.set_xlabel("Sample")
-    ax.set_ylabel("Value")
-    ax.legend()
+    ax.legend(loc='upper right', fontsize='x-small')
+    fig.tight_layout()
 
-    fig_canvas = FigureCanvasTkAgg(fig, canvas)
-    fig_canvas.draw()
+    # 5. Attach to the widget
+    fig_canvas = FigureCanvasTkAgg(fig, real_tk_canvas)
     fig_canvas.get_tk_widget().pack(fill="both", expand=True)
-    plt.close(fig)
+    fig_canvas.draw()
 
 
 def clear_other_lists(selected_key, window, gesture_groups):
@@ -340,7 +353,7 @@ def average_gesture(project_folder, gesture, target_samples=64):
     return out.values.tolist()
 
 
-def record_gesture(ser, gesture_name, project_folder):
+def record_gesture(gesture_name, project_folder):
     import serial
     import csv
     import time
@@ -348,7 +361,7 @@ def record_gesture(ser, gesture_name, project_folder):
     import os
     from scipy.interpolate import interp1d
 
-    PORT = "/dev/ttyACM0"
+    PORT = "/dev/tty.usbmodem101"
     BAUD = 115200
 
     GESTURE = gesture_name
@@ -360,15 +373,15 @@ def record_gesture(ser, gesture_name, project_folder):
     OUTPUT_FOLDER = os.path.join(project_folder, "normalized_gestures")
     os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-    # try:
-    #     # ser = serial.Serial(PORT, BAUD, timeout=0.05)
-    # except Exception as e:
-    #     sg.popup_error(
-    #         "Device not connected\n\n"
-    #         f"Could not open {PORT}\n\n"
-    #         f"{e}"
-    #     )
-    #     return
+    try:
+        ser = serial.Serial(PORT, BAUD, timeout=0.05)
+    except Exception as e:
+        sg.popup_error(
+            "Device not connected\n\n"
+            f"Could not open {PORT}\n\n"
+            f"{e}"
+        )
+        return
 
     print("Waiting for serial data...")
     # ------------------ Add Popup for Waiting ------------------
@@ -386,7 +399,7 @@ def record_gesture(ser, gesture_name, project_folder):
     while True:
         if time.time() - wait_start > START_TIMEOUT:
             waiting_popup.close()
-            # raise TimeoutError("No serial data received")
+            raise TimeoutError("No serial data received")
 
         line = ser.readline().decode(errors="ignore").strip()
         if line.count(",") == 5:
@@ -398,20 +411,20 @@ def record_gesture(ser, gesture_name, project_folder):
             waiting_popup.close()
             break
 
-    # wait_start = time.time()
-    # rows = []
+    wait_start = time.time()
+    rows = []
 
     # wait for start
-    # while True:
-    #     # if time.time() - wait_start > START_TIMEOUT:
-    #         # raise TimeoutError("No serial data received")
+    while True:
+        if time.time() - wait_start > START_TIMEOUT:
+            raise TimeoutError("No serial data received")
 
-    #     line = ser.readline().decode(errors="ignore").strip()
-    #     if line.count(",") == 5:
-    #         gesture_start = time.time()
-    #         last_data_time = gesture_start
-    #         rows.append([0.0] + line.split(","))
-    #         break
+        line = ser.readline().decode(errors="ignore").strip()
+        if line.count(",") == 5:
+            gesture_start = time.time()
+            last_data_time = gesture_start
+            rows.append([0.0] + line.split(","))
+            break
 
     # record
     while True:
@@ -491,7 +504,7 @@ def popup_plot(data, title="Averaged Gesture"):
 
     win = sg.Window(title, layout, modal=True, finalize=True)
 
-    draw_plot(win["-POP_CANVAS-"].TKCanvas, data)
+    draw_plot(win["-POP_CANVAS-"], data)
 
     while True:
         event, _ = win.read()
@@ -714,7 +727,7 @@ while True:
             sg.popup("Select a gesture first")
             continue
 
-        port = "/dev/ttyACM0"   # or COM3, hardcoded
+        port = "/dev/tty.usbmodem101"   # or COM3, hardcoded
 
         # if not is_correct_firmware(port):
         #     print("Flashing with streaming code")
@@ -729,9 +742,8 @@ while True:
         was_empty = gesture not in gesture_groups or len(gesture_groups[gesture]) == 0
 
         # Record the gesture
-        recording = True
-        record_gesture(ser, gesture, folder)
-        recording = False
+        record_gesture(gesture, folder)
+
         # Refresh window ONLY if this was the first CSV for a new label
         if was_empty:
             window.close()
@@ -762,7 +774,7 @@ while True:
         filename = selected[0]
         csv_path = os.path.join(folder, "normalized_gestures", filename)
         data = load_csv(csv_path)
-        draw_plot(window["-CANVAS-"].TKCanvas, data)
+        draw_plot(window["-CANVAS-"], data)
 
 window.close()
 
