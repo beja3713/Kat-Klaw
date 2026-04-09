@@ -16,7 +16,7 @@
 #define DTW_INF 1e30f
 #define SIM_THRESHOLD 0.35f
 
-#define LED_COUNT 4
+#define LED_COUNT 200
 
 /* ================= STRUCTS ================= */
 typedef struct struct_message {
@@ -38,8 +38,8 @@ struct GestureTemplate {
 float live[N_SAMPLES][AXES];
 int sampleCount = 0;
 
-uint8_t broadcastAddress[] = {0xB8, 0xF8, 0x62, 0xD5, 0xCD, 0x24};
-
+uint8_t broadcastAddress[] = {0x1c, 0xdb, 0xd4, 0x40, 0x63, 0x0c};
+//1c:db:d4:40:63:0c
 struct_message myData;
 struct_message_in inBands;
 esp_now_peer_info_t peerInfo;
@@ -123,39 +123,39 @@ void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
   if((inBands.band1 > inBands.band2) && (inBands.band1 > inBands.band3)
      && (inBands.band1 > inBands.band4) && (inBands.band1 > inBands.band5)
      && (inBands.band1 > inBands.band6)) {
-      pixels.fill(pixels.Color(255 * inBands.band1, 0, 0), 0, 4);
+      pixels.fill(pixels.Color(255 * inBands.band1, 0, 0), 0, LED_COUNT);
     }
   //band2 is the greatest: make it arenge
   else if((inBands.band2 > inBands.band1) && (inBands.band2 > inBands.band3)
      && (inBands.band2 > inBands.band4) && (inBands.band2 > inBands.band5)
      && (inBands.band2 > inBands.band6)) {
-      pixels.fill(pixels.Color(255 * inBands.band2, 100 * inBands.band2, 0), 0, 4);
+      pixels.fill(pixels.Color(255 * inBands.band2, 100 * inBands.band2, 0), 0, LED_COUNT);
     }
   //band 3 is the greatest: make it yellow
   else if((inBands.band3 > inBands.band1) && (inBands.band3 > inBands.band2)
      && (inBands.band3 > inBands.band4) && (inBands.band3 > inBands.band5)
      && (inBands.band3 > inBands.band6)) {
-      pixels.fill(pixels.Color(255 * inBands.band3, 255 * inBands.band3, 0), 0, 4);
+      pixels.fill(pixels.Color(255 * inBands.band3, 255 * inBands.band3, 0), 0, LED_COUNT);
     }
   //band 4 is the greatest: make it green
   else if((inBands.band4 > inBands.band1) && (inBands.band4 > inBands.band2)
      && (inBands.band4 > inBands.band3) && (inBands.band4 > inBands.band5)
      && (inBands.band4 > inBands.band6)) {
-      pixels.fill(pixels.Color(0, 255 * inBands.band4, 0), 0, 4);
+      pixels.fill(pixels.Color(0, 255 * inBands.band4, 0), 0, LED_COUNT);
     }
   
   //band 5 is the greatest: make it blue
   else if((inBands.band5 > inBands.band1) && (inBands.band5 > inBands.band2)
      && (inBands.band5 > inBands.band3) && (inBands.band5 > inBands.band4)
      && (inBands.band5 > inBands.band6)) {
-      pixels.fill(pixels.Color(0, 0, 255 * inBands.band5), 0, 4);
+      pixels.fill(pixels.Color(0, 0, 255 * inBands.band5), 0, LED_COUNT);
     }
 
   //band 6 is the greatest: make it violet 
   else if((inBands.band6 > inBands.band1) && (inBands.band6 > inBands.band2)
      && (inBands.band6 > inBands.band3) && (inBands.band6 > inBands.band4)
      && (inBands.band6 > inBands.band5)) {
-      pixels.fill(pixels.Color(255 * inBands.band6, 0, 255 * inBands.band6), 0, 4);
+      pixels.fill(pixels.Color(255 * inBands.band6, 0, 255 * inBands.band6), 0, LED_COUNT);
     }
   pixels.setBrightness(100);
   pixels.show();
@@ -251,13 +251,13 @@ void CollectIMU() {
 
   int buttonState = digitalRead(BUTTON_PIN);
 
-  if (buttonState == !HIGH && !buttonWasHigh) {
+  if (buttonState == HIGH && !buttonWasHigh) {
     // pressStart = millis();
     buttonWasHigh = true;
     sampleCount = 0;
   }
 
-  if (buttonState == !HIGH && sampleCount < N_SAMPLES) {
+  if (buttonState == HIGH && sampleCount < N_SAMPLES) {
     float ax, ay, az, gx, gy, gz;
     while (!IMU.accelerationAvailable() || !IMU.gyroscopeAvailable()) {}
     IMU.readAcceleration(ax, ay, az);
@@ -274,7 +274,7 @@ void CollectIMU() {
     delay(SAMPLE_DELAY_MS);
   }
 
-  if (buttonState == !LOW && buttonWasHigh) {
+  if (buttonState == LOW && buttonWasHigh) {
     buttonWasHigh = false;
     if (sampleCount > 0) classifyGesture();
   }
@@ -296,6 +296,9 @@ void setup() {
 
   InitWiFi();
   Serial.println("ESP32 Gesture Classifier Ready");
+
+  pixels.fill(pixels.Color(100, 100, 100), 0, LED_COUNT);
+  Serial.print("LEDs should be on");
 }
 
 void loop() {
