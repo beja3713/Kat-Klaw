@@ -3,6 +3,8 @@
 #include <WiFi.h>
 #include <esp_now.h>
 #include <Adafruit_NeoPixel.h>
+#include <Wire.h>
+#include <INA226.h>
 #include "templates/templates_index.h"
 
 /* ================= CONFIG ================= */
@@ -16,7 +18,14 @@
 #define DTW_INF 1e30f
 #define SIM_THRESHOLD 0.35f
 
+// ---- LEDs ----
 #define LED_COUNT 200
+// ---- Battery -----
+#define MONITOR_LED_PIN 13
+#define MONITOR_LED_COUNT 5
+#define BATTERY_FULL_V 12.6
+#define FLASH_THRESHOLD_V 9.2
+#define FLASH_INTERVAL_MS 300
 
 /* ================= STRUCTS ================= */
 typedef struct struct_message {
@@ -44,12 +53,20 @@ struct_message myData;
 struct_message_in inBands;
 esp_now_peer_info_t peerInfo;
 
+INA226 INA(0x40); // INA
+
 GestureTemplate gestures[NUM_GESTURES];
 Adafruit_NeoPixel pixels(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel monitor_pixels(MONITOR_LED_COUNT, MONITOR_LED_PIN, NEO_GRB + NEO_KHZ800);
 
 unsigned long startOfUnpackaging, startOfLED, ledsOn, frame1, frame2;
 bool ifKickOn = false;
 bool ifKickOff = true;
+
+// ---- Battery ----
+unsigned long lastFlashTime = 0;
+bool flashState = false;
+const unsigned long flashIntervalMs = FLASH_INTERVAL_MS;
 
 /* ================= FORWARD DECLARATIONS ================= */
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status);
@@ -61,8 +78,61 @@ void setupTemplates();
 void CollectIMU();
 void classifyGesture();
 
+void Scanner(); // DEBUG: Finds I2C addresses
+
+void setAllLEDs(uint8_t, uint8_t g, uint8_t b);
+void flashRedWarning();
+void showBatteryColor(float batteryVoltage);
+void BatteryIndicate();
+
 float cosineDTW(const float tmpl[N_SAMPLES][AXES]);
 static inline float cosineDistance(const float a[AXES], const float b[AXES]);
+
+/* ========== BATTERY INDICATOR ============ */
+
+void setAllLEDs(uint8_t r, uint8_t g, uint8_t b) {
+  for (int i = 0; i < LED_COUNT; i++) {
+    monitor_pixels.setPixelColor(i, monitor_pixels.Color(r, g, b));
+  }
+  monitor_pixels.show();
+}
+
+void flashRedWarning(){
+    unsigned long now = millis();
+    if (now - lastFlashTime >= flashIntervalMs){
+      lastFlashTime = now;
+      flashState = !flashState;
+
+      if (flashState) {
+        setAllLEDs(255, 0, 0);
+      } else {
+        setAllLEDs(0, 0, 0);
+      }
+    }
+  }
+
+void showBatteryColor(float batteryVoltage){
+
+if (batteryVoltage > BATTERY_FULL_V) batteryVoltage = BATTERY_FULL_V;
+if (batteryVoltage < FLASH_THRESHOLD_V) batteryVoltage = FLASH_THRESHOLD_V;
+
+float fraction =
+  (batteryVoltage - FLASH_THRESHOLD_V) / (BATTERY_FULL_V - FLASH_THRESHOLD_V);
+
+uint8_t red = (uint8_t)(255.0f * (1.0f - fraction));
+uint8_t green = (uint8_t)(255.0f * fraction);
+
+setAllLEDs(red, green, 0);
+}
+
+void BatteryIndicate(){
+  float batteryVoltage = INA.getBusVoltage();
+  if(batteryVoltage <= FLASH_THRESHOLD_V){
+    flashRedWarning();
+    Serial.println("Battery too low, please unplug");
+  } else showBatteryColor(batteryVoltage);
+}
+
 
 /* ================= WIFI ================= */
 void InitWiFi(){
@@ -283,6 +353,7 @@ void CollectIMU() {
 /* ================= SETUP / LOOP ================= */
 void setup() {
   Serial.begin(115200);
+  delay(1000); // Delay for Serial to wake up
   pixels.begin();
   pixels.clear();
   pixels.show();
@@ -292,7 +363,9 @@ void setup() {
 
   setupTemplates();
 
-  if (!IMU.begin()) while (1);
+  // if (!IMU.begin()) while (1) Serial.println("IMU not connected");
+  Wire.begin();
+  if (!INA.begin()) while (1) Serial.println("INA funking out");
 
   InitWiFi();
   Serial.println("ESP32 Gesture Classifier Ready");
@@ -302,5 +375,6 @@ void setup() {
 }
 
 void loop() {
+  BatteryIndicate();
   CollectIMU();
 }
