@@ -363,7 +363,7 @@ void setup() {
 
   setupTemplates();
 
-  // if (!IMU.begin()) while (1) Serial.println("IMU not connected");
+  if (!IMU.begin()) while (1) Serial.println("IMU not connected");
   Wire.begin();
   if (!INA.begin()) while (1) Serial.println("INA funking out");
 
