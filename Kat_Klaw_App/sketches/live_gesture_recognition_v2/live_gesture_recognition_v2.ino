@@ -9,19 +9,24 @@
 
 /* ================= CONFIG ================= */
 #define BUTTON_PIN 5
-#define LED_PIN 11
+#define LED_PIN_1 9
+#define LED_PIN_2 10
+#define LED_PIN_3 11
+#define LED_PIN_4 12
+#define LED_PIN_5 13
 #define SYNC_PIN 12
 #define N_SAMPLES 64 * 2
 #define AXES 6
 #define SAMPLE_DELAY_MS (1000 / N_SAMPLES)
 
 #define DTW_INF 1e30f
-#define SIM_THRESHOLD 0.35f
+// #define SIM_THRESHOLD 0.35f
+#define SIM_THRESHOLD 0.4f
 
 // ---- LEDs ----
-#define LED_COUNT 200
+#define LED_COUNT 40
 // ---- Battery -----
-#define MONITOR_LED_PIN 13
+#define MONITOR_LED_PIN 6
 #define MONITOR_LED_COUNT 5
 #define BATTERY_FULL_V 12.6
 #define FLASH_THRESHOLD_V 9.2
@@ -30,8 +35,6 @@
 /* ================= STRUCTS ================= */
 typedef struct struct_message {
   char gesture[32];
-  // unsigned long sendMillis;
-  // unsigned long syncMillis;
 } struct_message;
 
 typedef struct struct_message_in {
@@ -56,17 +59,23 @@ esp_now_peer_info_t peerInfo;
 INA226 INA(0x40); // INA
 
 GestureTemplate gestures[NUM_GESTURES];
-Adafruit_NeoPixel pixels(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+Adafruit_NeoPixel strip1(LED_COUNT, LED_PIN_1, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip2(LED_COUNT, LED_PIN_2, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip3(LED_COUNT, LED_PIN_3, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip4(LED_COUNT, LED_PIN_4, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip5(LED_COUNT, LED_PIN_5, NEO_GRB + NEO_KHZ800);
+
 Adafruit_NeoPixel monitor_pixels(MONITOR_LED_COUNT, MONITOR_LED_PIN, NEO_GRB + NEO_KHZ800);
 
-unsigned long startOfUnpackaging, startOfLED, ledsOn, frame1, frame2;
-bool ifKickOn = false;
-bool ifKickOff = true;
+bool newBands = false;
 
 // ---- Battery ----
 unsigned long lastFlashTime = 0;
 bool flashState = false;
 const unsigned long flashIntervalMs = FLASH_INTERVAL_MS;
+unsigned long lastCheck = 0, timeCheck = 3000;
+float batteryVoltage = 12;
 
 /* ================= FORWARD DECLARATIONS ================= */
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status);
@@ -98,18 +107,18 @@ void setAllLEDs(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 void flashRedWarning(){
-    unsigned long now = millis();
-    if (now - lastFlashTime >= flashIntervalMs){
-      lastFlashTime = now;
-      flashState = !flashState;
+  unsigned long now = millis();
+  if (now - lastFlashTime >= flashIntervalMs){
+    lastFlashTime = now;
+    flashState = !flashState;
 
-      if (flashState) {
-        setAllLEDs(255, 0, 0);
-      } else {
-        setAllLEDs(0, 0, 0);
-      }
+    if (flashState) {
+      setAllLEDs(255, 0, 0);
+    } else {
+      setAllLEDs(0, 0, 0);
     }
   }
+}
 
 void showBatteryColor(float batteryVoltage){
 
@@ -126,13 +135,77 @@ setAllLEDs(red, green, 0);
 }
 
 void BatteryIndicate(){
-  float batteryVoltage = INA.getBusVoltage();
+  if((millis() - lastCheck) > timeCheck)
+  {
+    batteryVoltage = INA.getBusVoltage();
+    lastCheck = millis();
+  }
+
   if(batteryVoltage <= FLASH_THRESHOLD_V){
     flashRedWarning();
-    Serial.println("Battery too low, please unplug");
+    //Serial.println("Battery too low, please unplug");
   } else showBatteryColor(batteryVoltage);
 }
 
+/* ================= AUDIO LED CODE ================= */
+
+void audioFlashLED(int r, int g, int b)
+{
+  strip1.fill(strip1.Color(r,g,b), 0, LED_COUNT);
+  strip2.fill(strip1.Color(r,g,b), 0, LED_COUNT);
+  strip3.fill(strip1.Color(r,g,b), 0, LED_COUNT);
+  strip4.fill(strip1.Color(r,g,b), 0, LED_COUNT);
+  strip5.fill(strip1.Color(r,g,b), 0, LED_COUNT);
+}
+
+void audioColorLED()
+{
+  //band1 is the greatest: make it deep blue
+  if((inBands.band1 > inBands.band2) && (inBands.band1 > inBands.band3)
+  && (inBands.band1 > inBands.band4) && (inBands.band1 > inBands.band5)
+  && (inBands.band1 > inBands.band6))
+  {
+    audioFlashLED(0, 0, 255 * inBands.band1);
+  }
+  //band2 is the greatest: make it yellow
+  else if((inBands.band2 > inBands.band1) && (inBands.band2 > inBands.band3)
+  && (inBands.band2 > inBands.band4) && (inBands.band2 > inBands.band5)
+  && (inBands.band2 > inBands.band6)) 
+  {
+    audioFlashLED(200 * inBands.band2, 78 * inBands.band2, 0);
+  }
+  //band 3 is the greatest: make it red
+  else if((inBands.band3 > inBands.band1) && (inBands.band3 > inBands.band2)
+  && (inBands.band3 > inBands.band4) && (inBands.band3 > inBands.band5)
+  && (inBands.band3 > inBands.band6)) 
+  {
+    audioFlashLED(200 * inBands.band3, 0, 0);
+  }
+  //band 4 is the greatest: make it light blue
+  else if((inBands.band4 > inBands.band1) && (inBands.band4 > inBands.band2)
+  && (inBands.band4 > inBands.band3) && (inBands.band4 > inBands.band5)
+  && (inBands.band4 > inBands.band6)) 
+  {
+    audioFlashLED(117 * inBands.band4, 117 * inBands.band4, 200 * inBands.band4);
+  }
+  
+  //band 5 is the greatest: make it green
+  else if((inBands.band5 > inBands.band1) && (inBands.band5 > inBands.band2)
+  && (inBands.band5 > inBands.band3) && (inBands.band5 > inBands.band4)
+  && (inBands.band5 > inBands.band6)) 
+  {
+    audioFlashLED(0, 78 * inBands.band5, 0);
+  }
+
+  //band 6 is the greatest: make it violet 
+  else if((inBands.band6 > inBands.band1) && (inBands.band6 > inBands.band2)
+  && (inBands.band6 > inBands.band3) && (inBands.band6 > inBands.band4)
+  && (inBands.band6 > inBands.band5)) 
+  {
+    audioFlashLED(200 * inBands.band6, 0, 200 * inBands.band6);
+  }
+  strip1.show(); strip2.show(); strip3.show(); strip4.show(); strip5.show();
+}
 
 /* ================= WIFI ================= */
 void InitWiFi(){
@@ -163,9 +236,6 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
 
 void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int len) {
   memcpy(&inBands, incomingData, sizeof(inBands));
-  // startOfUnpackaging = micros();
-
-  memcpy(&inBands, incomingData, sizeof(inBands));
   
   // Serial.print(inBands.band1); Serial.print(", "); 
   // Serial.print(inBands.band2); Serial.print(", ");
@@ -174,72 +244,7 @@ void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int 
   // Serial.print(inBands.band5); Serial.print(", "); 
   // Serial.print(inBands.band6); Serial.println("; ");
 
-  if(inBands.band1 > 0 && ifKickOff == true)
-  {
-    ifKickOn = true;
-    ifKickOff = false;
-    frame2 = micros() - frame1;
-  }
-  frame1 = micros();
-
-  if(inBands.band1 == 0)
-  {
-    ifKickOff = true;
-  }
-
-  startOfLED = micros();
-
-  //band1 is the greatest: make it red
-  if((inBands.band1 > inBands.band2) && (inBands.band1 > inBands.band3)
-     && (inBands.band1 > inBands.band4) && (inBands.band1 > inBands.band5)
-     && (inBands.band1 > inBands.band6)) {
-      pixels.fill(pixels.Color(255 * inBands.band1, 0, 0), 0, LED_COUNT);
-    }
-  //band2 is the greatest: make it arenge
-  else if((inBands.band2 > inBands.band1) && (inBands.band2 > inBands.band3)
-     && (inBands.band2 > inBands.band4) && (inBands.band2 > inBands.band5)
-     && (inBands.band2 > inBands.band6)) {
-      pixels.fill(pixels.Color(255 * inBands.band2, 100 * inBands.band2, 0), 0, LED_COUNT);
-    }
-  //band 3 is the greatest: make it yellow
-  else if((inBands.band3 > inBands.band1) && (inBands.band3 > inBands.band2)
-     && (inBands.band3 > inBands.band4) && (inBands.band3 > inBands.band5)
-     && (inBands.band3 > inBands.band6)) {
-      pixels.fill(pixels.Color(255 * inBands.band3, 255 * inBands.band3, 0), 0, LED_COUNT);
-    }
-  //band 4 is the greatest: make it green
-  else if((inBands.band4 > inBands.band1) && (inBands.band4 > inBands.band2)
-     && (inBands.band4 > inBands.band3) && (inBands.band4 > inBands.band5)
-     && (inBands.band4 > inBands.band6)) {
-      pixels.fill(pixels.Color(0, 255 * inBands.band4, 0), 0, LED_COUNT);
-    }
-  
-  //band 5 is the greatest: make it blue
-  else if((inBands.band5 > inBands.band1) && (inBands.band5 > inBands.band2)
-     && (inBands.band5 > inBands.band3) && (inBands.band5 > inBands.band4)
-     && (inBands.band5 > inBands.band6)) {
-      pixels.fill(pixels.Color(0, 0, 255 * inBands.band5), 0, LED_COUNT);
-    }
-
-  //band 6 is the greatest: make it violet 
-  else if((inBands.band6 > inBands.band1) && (inBands.band6 > inBands.band2)
-     && (inBands.band6 > inBands.band3) && (inBands.band6 > inBands.band4)
-     && (inBands.band6 > inBands.band5)) {
-      pixels.fill(pixels.Color(255 * inBands.band6, 0, 255 * inBands.band6), 0, LED_COUNT);
-    }
-  pixels.setBrightness(100);
-  pixels.show();
-
-  ledsOn = micros();
-
-  if(ifKickOn == true)
-  {
-
-    Serial.println((String) "UNPACKAGING: " +(startOfLED - startOfUnpackaging)+ 
-                            " LEDS: " +(ledsOn - startOfLED)+
-                            " FRAME: " +frame2);
-    ifKickOn = false;
-  }
+  newBands = true;
 }
 
 
@@ -306,7 +311,6 @@ void classifyGesture() {
 
   if (bestIdx >= 0) {
     strncpy(myData.gesture, gestures[bestIdx].name, sizeof(myData.gesture));
-    // myData.sendMillis = millis();
     esp_now_send(broadcastAddress, (uint8_t*)&myData, sizeof(myData));
     Serial.println(gestures[bestIdx].name);
   } else {
@@ -322,7 +326,6 @@ void CollectIMU() {
   int buttonState = digitalRead(BUTTON_PIN);
 
   if (buttonState == HIGH && !buttonWasHigh) {
-    // pressStart = millis();
     buttonWasHigh = true;
     sampleCount = 0;
   }
@@ -354,9 +357,10 @@ void CollectIMU() {
 void setup() {
   Serial.begin(115200);
   delay(1000); // Delay for Serial to wake up
-  pixels.begin();
-  pixels.clear();
-  pixels.show();
+
+  strip1.begin(); strip2.begin(); strip3.begin(); strip4.begin(); strip5.begin();
+  strip1.clear(); strip2.clear(); strip3.clear(); strip4.clear(); strip5.clear();
+  strip1.show(); strip2.show(); strip3.show(); strip4.show(); strip5.show();
 
   pinMode(BUTTON_PIN, INPUT);
   pinMode(SYNC_PIN, OUTPUT);
@@ -370,11 +374,23 @@ void setup() {
   InitWiFi();
   Serial.println("ESP32 Gesture Classifier Ready");
 
-  pixels.fill(pixels.Color(100, 100, 100), 0, LED_COUNT);
-  Serial.print("LEDs should be on");
+  xTaskCreatePinnedToCore(LED, "LED Task", 36000, NULL, 1, NULL, 1);
+}
+
+void LED(void * parameter) {
+  for(;;) 
+  {
+    if(newBands == true)
+    {
+      audioColorLED();
+      newBands = false;
+    }
+    BatteryIndicate();
+    CollectIMU();
+
+    vTaskDelay(1);
+  }
 }
 
 void loop() {
-  BatteryIndicate();
-  CollectIMU();
 }
